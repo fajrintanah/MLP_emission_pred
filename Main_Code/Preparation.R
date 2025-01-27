@@ -179,3 +179,23 @@ EL_Data_N2 <- EL_Data_N %>%
 				select(-c(qc_N)) # eliminate N and qc_N columns
 
 str(EL_Data_N2 )
+		tibble [829 × 7] (S3: tbl_df/tbl/data.frame)
+		 $ OP_Age : chr [1:829] "<6" "<6" "<6" "<6" ...
+		 $ Thick  : chr [1:829] "<3" "<3" "<3" "<3" ...
+		 $ Season : chr [1:829] "Rainy" "Rainy" "Rainy" "Rainy" ...
+		 $ D_Canal: num [1:829] 10 10 10 10 10 10 10 10 10 10 ...
+		 $ D_OPT  : num [1:829] 1 1 2 2 2 3 3 4 4 4 ...
+		 $ Depth  : num [1:829] 40 70 20 40 70 20 70 20 40 70 ...
+		 $ N      : num [1:829] 15946 11816 13862 14955 19421 ...
+
+
+
+
+
+
+
+
+
+
+
+
