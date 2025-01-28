@@ -58,11 +58,17 @@ test_data_N <- testing(data_split_N)
 #set the recipes
   N_rec <-
   recipe(N ~ OP_Age + Thick + Season + D_Canal + D_OPT + Depth,
-         data = train_data_N) %>% 
+           data = train_data_N) %>%
    step_dummy(all_nominal_predictors(), one_hot = TRUE) %>% # dummy coding
    step_zv(all_predictors()) %>% # remove zero variance predictors
    step_normalize(all_numeric_predictors()) %>%  # data normalization
    step_interact(~ all_predictors()^2) # add interaction
+
+# Finalize the recipe by prepping it on training data
+N_rec_prepped <- prep(N_rec, training = train_data_N)
+
+# Preprocess the test data using the finalized recipe
+test_data_N_processed <- bake(N_rec_prepped, new_data = test_data_N)
 
 mlp_spec_N1 <- 
   mlp(epochs = 1000, hidden_units = 5, penalty = 0.01, learn_rate = 0.1) %>%
@@ -75,13 +81,4 @@ mlp_wflow1 <- N_rec %>%
 set.seed(987)
 mlp_model1 <- fit(mlp_wflow1, train_data_N)
 mlp_model1 %>% extract_fit_engine()
-
-mlp_model1 %>% 
-  extract_fit_parsnip() %>% 
-  predict(test_data_N) %>% 
-  bind_cols(test_data_N) %>% 
-  metrics(truth = N, estimate = .pred)
-
-# Perform a 10-fold cross-validation
-set.seed(123) 
-mlp_vfold <- vfold_cv(train_data_N, v = 10)
+mlp_model1
