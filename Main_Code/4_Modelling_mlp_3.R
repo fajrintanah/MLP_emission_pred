@@ -24,14 +24,14 @@ N_rec2 <- recipe(N ~ OP_Age + Thick + Season + D_Canal + D_OPT + Depth,
 N_rec_prepped2 <- prep(N_rec2, training = train_data_N)
 
 # 4. Process datasets ---------------------------------------------------------
-train_data_processed2 <- bake(N_rec_prepped2, new_data = train_data_N)
-test_data_processed2 <- bake(N_rec_prepped2, new_data = test_data_N)
+train_data_processed-N2 <- bake(N_rec_prepped2, new_data = train_data_N)
+test_data_processed2-N2 <- bake(N_rec_prepped2, new_data = test_data_N)
 
 # 5. Verify processed data structure ------------------------------------------
-glimpse(train_data_processed2)
+glimpse(train_data_processed-N2)
 
 # 6. Lightweight Model Spec ---------------------------------------------------
-mlp_spec_tune2 <- mlp(
+mlp_spec_tune_N2 <- mlp(
   epochs = tune(),
   hidden_units = tune(),
   penalty = tune(),
@@ -41,9 +41,9 @@ mlp_spec_tune2 <- mlp(
   set_mode("regression")
 
 # 7. Minimal Workflow --------------------------------------------------------
-mlp_wflow_tune2 <- workflow() %>%
+mlp_wflow_tune_N2 <- workflow() %>%
   add_recipe(N_rec2) %>%
-  add_model(mlp_spec_tune2)
+  add_model(mlp_spec_tune_N2)
 
 # 8. Efficient Parallel Setup -------------------------------------------------
 cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))  # Safer core allocation
@@ -51,10 +51,10 @@ registerDoParallel(cl)
 
 # 9. Randomized Grid Search ---------------------------------------------------
 set.seed(123)
-folds <- vfold_cv(train_data_N, v = 5)
+folds_N <- vfold_cv(train_data_N, v = 5)
 
 set.seed(456)
-param_grid <- grid_random(
+param_grid_N2 <- grid_random(
   epochs(range = c(500, 1500)),
   hidden_units(range = c(5, 20)),
   penalty(range = c(-4, -1)),
@@ -63,10 +63,10 @@ param_grid <- grid_random(
 )
 
 # 10. Memory-Optimized Tuning --------------------------------------------------
-grid_results2 <- tune_grid(
-  mlp_wflow_tune2,
-  resamples = folds,
-  grid = param_grid,
+grid_results_N2 <- tune_grid(
+  mlp_wflow_tune_N2,
+  resamples = folds_N,
+  grid = param_grid_N2,
   metrics = metric_set(yardstick::rmse, yardstick::mae),
   control = control_grid(
     verbose = TRUE,
@@ -84,15 +84,15 @@ stopCluster(cl)
 registerDoSEQ()
 
 # Show best combinations
-show_best(grid_results2, n = 10, metric = "rmse")
+show_best(grid_results_N2, n = 10, metric = "rmse")
 
 # Final model training with best params
-final_model2 <- mlp_wflow_tune2 %>%
-  finalize_workflow(select_best(grid_results2, metric = "rmse")) %>%
+final_model_N2 <- mlp_wflow_tune_N2 %>%
+  finalize_workflow(select_best(grid_results_N2, metric = "rmse")) %>%
   fit(train_data_N)
 
 # Lean test evaluation
-test_preds <- predict(final_model, test_data_N) %>% 
+test_preds_N2 <- predict(final_model_N2, test_data_N) %>% 
   bind_cols(test_data_N %>% select(N))
 
-test_preds %>% metrics(N, .pred)
+test_preds_N2 %>% metrics(N, .pred)
