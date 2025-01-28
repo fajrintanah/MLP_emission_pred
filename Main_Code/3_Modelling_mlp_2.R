@@ -12,7 +12,7 @@ test_data_N <- testing(data_split_N)
 
 # 2. Recipe Setup (Corrected) -------------------------------------------------
 # First define the recipe without immediate prep()
-N_rec <- recipe(N ~ OP_Age + Thick + Season + D_Canal + D_OPT + Depth,
+N_rec1 <- recipe(N ~ OP_Age + Thick + Season + D_Canal + D_OPT + Depth,
                 data = train_data_N) %>%
   # Convert character variables to factors first
   step_string2factor(all_nominal_predictors()) %>%  # Critical fix
@@ -21,17 +21,17 @@ N_rec <- recipe(N ~ OP_Age + Thick + Season + D_Canal + D_OPT + Depth,
   step_normalize(all_numeric_predictors())
 
 # 3. Prepare recipe using training data ---------------------------------------
-N_rec_prepped <- prep(N_rec, training = train_data_N)
+N_rec_prepped1 <- prep(N_rec1, training = train_data_N)
 
 # 4. Process datasets ---------------------------------------------------------
-train_data_processed <- bake(N_rec_prepped, new_data = train_data_N)
-test_data_processed <- bake(N_rec_prepped, new_data = test_data_N)
+train_data_processed_N1 <- bake(N_rec_prepped1, new_data = train_data_N)
+test_data_processed_N1 <- bake(N_rec_prepped1, new_data = test_data_N)
 
 # 5. Verify processed data structure ------------------------------------------
-glimpse(train_data_processed)
+glimpse(train_data_processed_N1)
 
 # 6. Lightweight Model Spec ---------------------------------------------------
-mlp_spec_tune <- mlp(
+mlp_spec_tune_N1 <- mlp(
   epochs = tune(),
   hidden_units = tune(),
   penalty = tune(),
@@ -41,9 +41,9 @@ mlp_spec_tune <- mlp(
   set_mode("regression")
 
 # 7. Minimal Workflow --------------------------------------------------------
-mlp_wflow_tune <- workflow() %>%
+mlp_wflow_tune_N1 <- workflow() %>%
   add_recipe(N_rec) %>%
-  add_model(mlp_spec_tune)
+  add_model(mlp_spec_tune_N1)
 
 # 8. Efficient Parallel Setup -------------------------------------------------
 cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))  # Safer core allocation
@@ -51,10 +51,10 @@ registerDoParallel(cl)
 
 # 9. Randomized Grid Search ---------------------------------------------------
 set.seed(123)
-folds <- vfold_cv(train_data_N, v = 5)
+folds_N <- vfold_cv(train_data_N, v = 5)
 
 set.seed(456)
-param_grid <- grid_random(
+param_grid_N1 <- grid_random(
   epochs(range = c(500, 1500)),
   hidden_units(range = c(5, 20)),
   penalty(range = c(-4, -1)),
@@ -63,10 +63,10 @@ param_grid <- grid_random(
 )
 
 # 10. Memory-Optimized Tuning --------------------------------------------------
-grid_results <- tune_grid(
-  mlp_wflow_tune,
-  resamples = folds,
-  grid = param_grid,
+grid_results_N1 <- tune_grid(
+  mlp_wflow_tune_N1,
+  resamples = folds_N,
+  grid = param_grid_N1,
   metrics = metric_set(yardstick::rmse, yardstick::mae),
   control = control_grid(
     verbose = TRUE,
@@ -84,15 +84,15 @@ stopCluster(cl)
 registerDoSEQ()
 
 # Show best combinations
-show_best(grid_results, n = 10, metric = "rmse")
+show_best(grid_results_N1, n = 10, metric = "rmse")
 
 # Final model training with best params
-final_model <- mlp_wflow_tune %>%
-  finalize_workflow(select_best(grid_results, "rmse")) %>%
+final_model_N1 <- mlp_wflow_tune_N1 %>%
+  finalize_workflow(select_best(grid_results_N1, metric = "rmse")) %>%
   fit(train_data_N)
 
 # Lean test evaluation
-test_preds <- predict(final_model, test_data_N) %>% 
+test_preds_N1 <- predict(final_model_N1, test_data_N) %>% 
   bind_cols(test_data_N %>% select(N))
 
-test_preds %>% metrics(N, .pred)
+test_preds_N1 %>% metrics(N, .pred)
