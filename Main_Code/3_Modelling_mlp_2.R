@@ -42,7 +42,7 @@ mlp_spec_tune_N1 <- mlp(
 
 # 7. Minimal Workflow --------------------------------------------------------
 mlp_wflow_tune_N1 <- workflow() %>%
-  add_recipe(N_rec) %>%
+  add_recipe(N_rec1) %>%
   add_model(mlp_spec_tune_N1)
 
 # 8. Efficient Parallel Setup -------------------------------------------------
@@ -96,3 +96,4 @@ test_preds_N1 <- predict(final_model_N1, test_data_N) %>%
   bind_cols(test_data_N %>% select(N))
 
 test_preds_N1 %>% metrics(N, .pred)
+
