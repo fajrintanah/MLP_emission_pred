@@ -50,8 +50,29 @@ cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))  # Safer core alloca
 registerDoParallel(cl)
 
 # 9. Randomized Grid Search ---------------------------------------------------
-set.seed(123)
-folds_N <- vfold_cv(train_data_N, v = 5)
+library(rsample)
+library(tidyverse)
+
+# Wrapper function for repeated k-fold cross-validation
+repeated_kfold_cv <- function(data, k = 5, n = 10, seed = 123) {
+  set.seed(seed)  # Ensures reproducibility
+  
+  # Create repeated k-fold cross-validation folds
+  repeated_folds <- tibble(
+    repeats = 1:n
+  ) %>%
+    mutate(
+      folds = map(repeats, ~ vfold_cv(data, v = k))
+    ) %>%
+    unnest(folds) %>%
+    mutate(id = paste0("Repeat_", repeats, "_", id)) %>%
+    select(-repeats)  # Optional: Keep output clean
+
+  return(repeated_folds)
+}
+
+
+folds_N <- repeated_kfold_cv(train_data_N, k = 10, n = 10 )
 
 set.seed(456)
 param_grid_N1 <- grid_random(
