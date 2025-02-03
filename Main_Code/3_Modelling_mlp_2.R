@@ -118,3 +118,4 @@ test_preds_N1 <- predict(final_model_N1, test_data_N) %>%
 
 test_preds_N1 %>% metrics(N, .pred)
 
+save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_03022025.RData')
