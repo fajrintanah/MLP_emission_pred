@@ -52,7 +52,7 @@ registerDoParallel(cl)
 
 # 9. Randomized Grid Search ---------------------------------------------------
 set.seed(123)
-folds_N <- vfold_cv(train_data_N, v = 5, repeats = 10 )
+folds_N <- vfold_cv(train_data_N, v = 5, repeats = 10)
 
 set.seed(123)
 param_grid_N1 <- grid_random(
@@ -87,15 +87,50 @@ registerDoSEQ()
 # Show best combinations
 show_best(grid_results_N1, n = 10, metric = "rmse")
 
-# Final model training with best params
-final_model_N1 <- mlp_wflow_tune_N1 %>%
-  finalize_workflow(select_best(grid_results_N1, metric = "rmse")) %>%
-  fit(train_data_N)
 
-# Lean test evaluation
-test_preds_N1 <- predict(final_model_N1, test_data_N) %>% 
-  bind_cols(test_data_N %>% select(N))
+save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_06022025.RData')
 
-test_preds_N1 %>% metrics(N, .pred)
 
-save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_03022025.RData')
+load(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_06022025.RData')
+
+# 12. Plotting the Results -----------------------------------------------------
+# Convert scientific notation to numeric for better plotting
+grid_results_plot <- show_best(grid_results_N1, n = 50, metric = "rmse") %>%
+  mutate(penalty = log10(penalty),  # Convert to log scale
+         learn_rate = log10(learn_rate))  # Convert to log scale
+
+# RMSE vs Hidden Units
+p1 <- ggplot(grid_results_plot, aes(x = hidden_units, y = mean)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = FALSE, color = "blue") +
+  labs(title = "RMSE vs Hidden Units", x = "Hidden Units", y = "RMSE") +
+  ylim(0, 25000) +
+  theme_minimal()
+
+# RMSE vs Epochs
+p2 <- ggplot(grid_results_plot, aes(x = epochs, y = mean)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = FALSE, color = "red") +
+  labs(title = "RMSE vs Epochs", x = "Epochs", y = "RMSE") +
+  ylim(0, 25000) +
+  theme_minimal()
+
+# RMSE vs Penalty (Log Scale)
+p3 <- ggplot(grid_results_plot, aes(x = penalty, y = mean)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = FALSE, color = "green") +
+  labs(title = "RMSE vs Penalty (Log Scale)", x = "log10(Penalty)", y = "RMSE") +
+  ylim(0, 25000) +
+  theme_minimal()
+
+# RMSE vs Learn Rate (Log Scale)
+p4 <- ggplot(grid_results_plot, aes(x = learn_rate, y = mean)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = FALSE, color = "purple") +
+  labs(title = "RMSE vs Learning Rate (Log Scale)", x = "log10(Learning Rate)", y = "RMSE") +
+  ylim(0, 25000) +
+  theme_minimal()
+
+# Arrange in a grid
+p1 + p2 + p3 + p4 + plot_layout(ncol = 2)
+
