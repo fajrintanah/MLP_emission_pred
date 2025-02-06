@@ -1,0 +1,1678 @@
+---
+title: "Macronutrient Prediction in Peat using ML"
+author: "Your Name"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Required Libraries
+
+```{r}
+library(tidyverse)
+library(grid)
+library(gridExtra)
+library(ggpubr)
+library(patchwork)
+library(ggfortify)
+library(mgcv)
+library(GGally)
+library(caret)
+library(caTools)
+library(readxl)
+library(randomForest)
+library(e1071)
+library(gbm)
+library(xgboost)
+library(pdp)
+library(lime)
+library(neuralnet)
+library(rpart)
+library(rsample)
+library(dplyr)
+library(rpart.plot)
+library(ipred)
+library(broom)
+library(ranger)
+library(NeuralNetTools)
+library(tidymodels)
+library(earth)
+library(iml)
+library(ModelMetrics)
+library(Metrics)
+library(Cubist)
+library(iBreakDown)
+library(DALEX)
+library(viridis)
+library(ICEbox)
+library(hrbrthemes)
+library(vip)
+library(fastDummies)
+library(brulee)
+```
+
+## Load Data
+
+```{r}
+R_macro <- read_excel("E:/Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data/R_macro.xlsx", 
+    col_types = c("text", "text", "skip", 
+        "text", "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric"))
+
+str(R_macro)
+```
+
+## Exploratory Data Analysis (EDA)
+
+### Summary Statistics
+
+```{r}
+summarize_stats <- function(x) {
+  tibble(
+    Min = min(x, na.rm = TRUE),
+    `1st Qu.` = quantile(x, 0.25, na.rm = TRUE),
+    Median = median(x, na.rm = TRUE),
+    Mean = mean(x, na.rm = TRUE),
+    `3rd Qu.` = quantile(x, 0.75, na.rm = TRUE),
+    Max = max(x, na.rm = TRUE),
+    StDev = sd(x, na.rm = TRUE),
+    Skw = (mean(x, na.rm = TRUE) - median(x, na.rm = TRUE)) / sd(x, na.rm = TRUE),
+    Krt = sum((x - mean(x, na.rm = TRUE))^4, na.rm = TRUE) /
+      (length(x) * (sd(x, na.rm = TRUE)^4)) - 3
+  )
+}
+
+summary_R_macro <- R_macro %>%
+  select_if(is.numeric) %>%
+  summarise(across(everything(), summarize_stats, .names = "{.col}")) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Statistics") %>%
+  unnest_wider(Statistics)
+
+print(summary_R_macro, n=15)
+```
+
+## Data Preprocessing
+
+```{r}
+# Load dataset and remove unwanted columns
+Data_N <- R_macro %>% select(-c(8:15))
+str(Data_N)
+```
+
+### Outlier Removal (IQR Method)
+
+```{r}
+EL_Data_N <- Data_N %>% 
+  mutate(
+    qc_N = ifelse(
+      N > quantile(N, 0.75, na.rm = TRUE) + 1.5 * IQR(N, na.rm = TRUE) | 
+      N < quantile(N, 0.25, na.rm = TRUE) - 1.5 * IQR(N, na.rm = TRUE), 
+      0, 
+      1
+    )
+  ) %>% 
+  mutate(N = ifelse(qc_N == 0, NA_real_, N)) %>% 
+  drop_na() %>% 
+  select(-qc_N) # Remove quality control column
+
+str(EL_Data_N)
+```
+
+### Data Splitting
+
+```{r}
+set.seed(123)
+data_split_N <- initial_split(EL_Data_N, prop = 0.7)
+train_data_N <- training(data_split_N)
+test_data_N <- testing(data_split_N)
+```
+
+### One-Hot Encoding
+
+```{r}
+EL_Data_N2 <- dummy_cols(EL_Data_N, 
+                         select_columns = c("OP_Age", "Thick", "Season"), 
+                         remove_selected_columns = TRUE)
+
+str(EL_Data_N2)
+```
+
+### Train-Test Split with Status Column
+
+```{r}
+set.seed(123)
+split_N <- initial_split(EL_Data_N2, prop = 0.7)
+trainSet_N <- training(split_N)
+testSet_N <- testing(split_N)
+
+N_train <- trainSet_N %>% mutate(Status = "TrainingN")
+N_test <- testSet_N %>% mutate(Status = "ValidationN")
+N_df <- bind_rows(N_train, N_test)
+
+str(N_df)
+```
+
+### Convert Data to Matrix for XGBoost
+
+```{r}
+x_N_train <- subset(trainSet_N, select = -N) %>% as.matrix() 
+y_N_train <- trainSet_N$N
+
+x_N_test <- subset(testSet_N, select = -N) %>% as.matrix() 
+y_N_test <- testSet_N$N
+```
+
+
+## Data Preprocessing
+
+```{r}
+# Assume x_N_train and y_N_train are preloaded datasets
+```
+
+## Multiple Linear Model (N)
+
+```{r}
+set.seed(42)
+tuned_lm_N <- train(
+  x = x_N_train,
+  y = y_N_train,
+  method = "lm",
+  metric = "RMSE",
+  trControl = trainControl(method = "repeatedcv", number = 10, repeats = 10)
+)
+
+summary(tuned_lm_N)
+```
+		Call:
+		lm(formula = .outcome ~ ., data = dat, family = "gaussian")
+
+		Residuals:
+			 Min       1Q   Median       3Q      Max 
+		-0.47416 -0.11764 -0.01719  0.10270  0.59384 
+
+		Coefficients: (3 not defined because of singularities)
+					   Estimate Std. Error t value Pr(>|t|)    
+		(Intercept)   0.3607292  0.0298921  12.068  < 2e-16 ***
+		DC            0.0001608  0.0001567   1.026    0.305    
+		DT            0.0080804  0.0065449   1.235    0.217    
+		Depth        -0.0002797  0.0003601  -0.777    0.438    
+		`Age_<6`      0.1484463  0.0180405   8.228 1.29e-15 ***
+		`Age_>15`    -0.1113608  0.0180032  -6.186 1.18e-09 ***
+		`Age_6-15`           NA         NA      NA       NA    
+		`Thick_<3`    0.0620993  0.0147122   4.221 2.83e-05 ***
+		`Thick_>3`           NA         NA      NA       NA    
+		Season_Dry   -0.0645187  0.0147179  -4.384 1.39e-05 ***
+		Season_Rainy         NA         NA      NA       NA    
+		---
+		Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+		Residual standard error: 0.1768 on 572 degrees of freedom
+		Multiple R-squared:  0.3015,	Adjusted R-squared:  0.2929 
+		F-statistic: 35.26 on 7 and 572 DF,  p-value: < 2.2e-16
+
+
+## -------- LogGLM
+```{r}
+set.seed = 42
+logGLM_N <- train(
+  x = x_N_train,
+  y = y_N_train,
+  method = "glm",
+  family = "binomial",
+  metric = "RMSE",
+  trControl = trainControl(method = "repeatedcv", number = 10, repeats=10)
+)
+
+summary(logGLM_N)
+```
+		Call:
+		NULL
+
+		Coefficients: (3 not defined because of singularities)
+					   Estimate Std. Error z value Pr(>|z|)   
+		(Intercept)  -0.5810807  0.3554406  -1.635  0.10209   
+		DC            0.0007113  0.0018707   0.380  0.70379   
+		DT            0.0361668  0.0781825   0.463  0.64365   
+		Depth        -0.0012425  0.0042951  -0.289  0.77236   
+		`Age_<6`      0.6117536  0.2086331   2.932  0.00337 **
+		`Age_>15`    -0.5187182  0.2212516  -2.344  0.01905 * 
+		`Age_6-15`           NA         NA      NA       NA   
+		`Thick_<3`    0.2767051  0.1757046   1.575  0.11530   
+		`Thick_>3`           NA         NA      NA       NA   
+		Season_Dry   -0.2871753  0.1759500  -1.632  0.10265   
+		Season_Rainy         NA         NA      NA       NA   
+		---
+		Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+		(Dispersion parameter for binomial family taken to be 1)
+
+			Null deviance: 118.092  on 579  degrees of freedom
+		Residual deviance:  85.088  on 572  degrees of freedom
+		AIC: 665.52
+
+		Number of Fisher Scoring iterations: 4
+
+
+## ------- Multivariate Adaptive regression spline  --------
+```{r}
+hyper_grid_mars_N <- expand.grid(
+  degree = 1:5, 
+  nprune = seq(2, 200, length.out = 10) %>% floor()
+  )
+
+set.seed(42)
+
+# cross validated model
+mars_N <- train(
+  x = x_N_train,
+  y = y_N_train,
+  method = "earth",
+  metric = "RMSE",
+  trControl = trainControl(method = "repeatedcv", number = 10, repeats=10),
+  tuneGrid = hyper_grid_mars_N)
+  
+# best model
+mars_N$bestTune
+```     
+   nprune degree
+22     24      3
+     
+```{r}
+ggplot(mars_N)
+
+summary(mars_N)
+```     
+		Call: earth(x=matrix[580,10], y=c(0.5106,0.2963...), keepxy=TRUE,
+					degree=3, nprune=24)
+
+										coefficients
+		(Intercept)                        0.4814843
+		Age_>15                           -0.2813070
+		Thick_>3                          -0.2080350
+		Age_<6 * Thick_>3                  0.1748749
+		Age_<6 * Season_Rainy              0.2204404
+		Age_>15 * Thick_>3                 0.2599538
+		h(DT-3) * Age_>15                  0.2630319
+		h(DT-2) * Age_<6 * Season_Rainy   -0.1287401
+		h(DT-3) * Age_>15 * Season_Dry    -0.2334379
+
+		Selected 9 of 14 terms, and 6 of 10 predictors (nprune=24)
+		Termination condition: Reached nk 21
+		Importance: Age_<6, Age_>15, Season_Rainy, Thick_>3, DT, ...
+		Number of terms at each degree of interaction: 1 2 4 2
+		GCV 0.02577957    RSS 13.88901    GRSq 0.4179913    RSq 0.4575048
+
+
+## ----------- Cubist ------------------
+```{r}
+grid_N_cub <- expand.grid(committees = c(1, 10, 50, 100, 150), neighbors = c(0, 1, 3, 5, 7, 9))
+
+set.seed(42)
+N_Cub <- train(
+  x = x_N_train,
+  y = y_N_train,
+  method = "cubist",
+  metric = "RMSE",
+  tuneGrid = grid_N_cub,
+  trControl = trainControl(method = "repeatedcv", number = 10, repeats=10)
+  )
+
+N_Cub$bestTune
+```      
+		  committees neighbors
+		6          1         9
+     
+```{r}     
+summary(N_Cub)
+```      
+			Call:
+			cubist.default(x = x, y = y, committees = param$committees)
+
+			Cubist [Release 2.07 GPL Edition]  Thu Aug  1 21:43:25 2024
+			---------------------------------
+
+				Target attribute 'outcome'
+			Read 580 cases (11 attributes) from undefined.data
+			Model:
+			  Rule 1: [194 cases, mean 0.2656046, range 0 to 0.6976789, est err 0.1241263]
+				if
+				Age_>15 > 0
+				then
+				outcome = 0.1980129 - 0.086 Season_Dry + 0.036 DT
+			  Rule 2: [193 cases, mean 0.3803885, range 0.002254667 to 0.9893192, est err 0.1218152]
+				if
+				Age_<6 <= 0
+				Age_>15 <= 0
+				then
+				outcome = 0.2398317 + 0.196 Thick_<3 + 0.00056 DC - 0.0006 Depth
+						  - 0.014 Age_>15 + 0.004 DT - 0.005 Season_Dry
+			  Rule 3: [72 cases, mean 0.4283931, range 0.1138716 to 0.8872719, est err 0.1341015]
+				if
+				DT > 3
+				Season_Dry <= 0
+				then
+				outcome = 0.4765078 - 0.147 Thick_<3
+			  Rule 4: [105 cases, mean 0.4712205, range 0.05600408 to 0.893779, est err 0.1157063]
+				if
+				Age_<6 > 0
+				Season_Dry > 0
+				then
+				outcome = 0.4310359 + 0.039 Age_<6 - 0.029 Age_>15 - 0.017 Season_Dry
+						  + 0.016 Thick_<3
+			  Rule 5: [66 cases, mean 0.6580209, range 0.2920319 to 0.9887948, est err 0.1344029]
+				if
+				DT <= 3
+				Age_<6 > 0
+				Season_Dry <= 0
+				then
+				outcome = 0.5774933 + 0.148 Thick_<3
+
+			Evaluation on training data (580 cases):
+
+				Average  |error|          0.1411723
+				Relative |error|               0.82
+				Correlation coefficient        0.62
+
+				Attribute usage:
+				  Conds  Model
+				   61%    47%    Age_>15
+				   58%    17%    Age_<6
+				   39%    78%    Season_Dry
+				   22%    61%    DT
+						  69%    Thick_<3
+						  31%    DC
+						  31%    Depth
+			Time: 0.0 secs
+
+```{r}    
+ggplot(N_Cub)
+```    
+
+## ------------------Tree Regression ---------------
+
+```{r}
+tGridRT <- expand.grid(cp = seq(0, .02, .0001))
+
+
+set.seed(42)
+TR_N <- train(
+			x = x_N_train,
+			y = y_N_train,
+                   method = 'rpart',
+                   metric = 'RMSE',
+                   tuneGrid = tGridRT, 
+				   trControl = trainControl(method = "repeatedcv", number = 10, repeats=10))
+
+ggplot(TR_N )
+     
+
+TR_N$bestTune
+```     
+			   cp
+		72 0.0071
+     
+```{r}
+TR_N
+```     
+		CART 
+
+		580 samples
+		 10 predictor
+
+		No pre-processing
+		Resampling: Cross-Validated (10 fold, repeated 10 times) 
+		Summary of sample sizes: 521, 520, 523, 523, 522, 524, ... 
+		Resampling results across tuning parameters:
+
+		  cp      RMSE       Rsquared   MAE      
+		  0.0000  0.1503084  0.5009438  0.1165801
+		  0.0001  0.1503132  0.5009139  0.1165808
+		  0.0002  0.1502783  0.5011481  0.1165528
+		  0.0003  0.1502229  0.5014106  0.1165146
+		  0.0004  0.1501728  0.5016826  0.1164963
+		  0.0005  0.1500957  0.5021059  0.1164418
+		  0.0006  0.1501228  0.5018790  0.1164269
+		  0.0007  0.1501500  0.5016727  0.1164826
+		  0.0008  0.1501783  0.5014627  0.1164874
+		  0.0009  0.1502951  0.5007294  0.1165912
+		  0.0010  0.1502007  0.5011874  0.1165463
+		  0.0011  0.1498853  0.5030773  0.1163038
+		  0.0012  0.1498216  0.5032790  0.1162908 # I remove the next rows till the end
+
+		RMSE was used to select the optimal model using the smallest value.
+		The final value used for the model was cp = 0.0071
+
+
+# ------ random forest --------
+```{r}
+## tuning RF 1
+
+mtry <- sqrt(ncol(x_N_train))
+#ntree: Number of trees to grow.
+ntree <- 3
+
+tunegrid_N <- expand.grid(.mtry = 5) 
+
+set.seed(123)
+RF_N <- train(
+			x = x_N_train,
+			y = y_N_train,
+                   method = 'rf',
+                   metric = 'RMSE',
+                   tuneGrid = tunegrid_N, 
+				   nodesize = 13,
+					ntree = 250,
+                   trControl = trainControl(method = "repeatedcv", number = 10, repeats=10))
+RF_N
+```     
+		Random Forest 
+
+		580 samples
+		 10 predictor
+
+		No pre-processing
+		Resampling: Cross-Validated (10 fold, repeated 10 times) 
+		Summary of sample sizes: 521, 522, 521, 523, 522, 522, ... 
+		Resampling results:
+
+		  RMSE       Rsquared   MAE      
+		  0.1450824  0.5277631  0.1115203
+
+		Tuning parameter 'mtry' was held constant at a value of 5
+
+
+## tuning RF 2
+### search optimum range of RF parameterisation from ranger 
+     
+```{r}
+hyper_grid_RF_N_all <- expand.grid(
+  mtry       = seq(2, 10, by = 1),
+  node_size  = seq(20, 30, by = 1),
+  num.trees	 = seq(50, 1000, by = 50),
+  OOB_RMSE   = 0
+)
+
+for(i in 1:nrow(hyper_grid_RF_N_all)) {
+  
+  # train model
+  model_rf_N_all <- ranger(
+	x = x_N_train,
+	y = y_N_train,
+    num.trees       = hyper_grid_RF_N_all$num.trees[i],
+    mtry            = hyper_grid_RF_N_all$mtry[i],
+    min.node.size   = hyper_grid_RF_N_all$node_size[i],
+    seed            = 42
+  )
+  
+  # add OOB error to grid
+  hyper_grid_RF_N_all$OOB_RMSE[i] <- sqrt(model_rf_N_all$prediction.error)
+}
+
+hyper_grid_RF_N_all %>% 
+  dplyr::arrange(OOB_RMSE) %>%  
+  arrange(OOB_RMSE) %>%
+		  top_n(-10, wt = OOB_RMSE)
+ ```    
+		   mtry node_size num.trees  OOB_RMSE
+		1     7        21       950 0.1448381
+		2     7        21       750 0.1448442
+		3     9        20       750 0.1448462
+		4     7        21       900 0.1448531
+		5     7        21      1000 0.1448692
+		6     9        20       550 0.1448821
+		7     9        21       750 0.1448824
+		8     7        21       850 0.1448865
+		9     9        20       900 0.1448884
+		10    9        20       700 0.1448959 # optimum mtry is located between 6 to 9, at nodesize 21, and ntree 950;  
+
+
+### apply aforementioned ranger's tuning parameterisation to the caret
+     
+```{r}				
+tunegrid_N2 <- expand.grid(.mtry = c(6:9)) 
+
+set.seed(123)
+RF_N2 <- train(
+	x = x_N_train,
+	y = y_N_train,
+                   method = 'rf',
+                   metric = 'RMSE',
+                   tuneGrid = tunegrid_N2, 
+				   nodesize = 21,
+					ntree = 950,
+                   trControl = trainControl(method = "repeatedcv", number = 10, repeats=10))
+
+print(RF_N2) 
+```     
+		Random Forest 
+
+		580 samples
+		 10 predictor
+
+		No pre-processing
+		Resampling: Cross-Validated (10 fold, repeated 10 times) 
+		Summary of sample sizes: 521, 522, 521, 523, 522, 522, ... 
+		Resampling results across tuning parameters:
+
+		  mtry  RMSE       Rsquared   MAE      
+		  6     0.1454281  0.5253235  0.1119937
+		  7     0.1452157  0.5262734  0.1118824
+		  8     0.1451740  0.5263998  0.1118289
+		  9     0.1453134  0.5255834  0.1118506
+
+		RMSE was used to select the optimal model using the smallest value.
+		The final value used for the model was mtry = 8.
+
+
+## tuning RF 3
+## general adjustment based on ranger's tuning information
+     
+```{r}
+tunegrid_N3 <- expand.grid(.mtry = c(6:9)) 
+
+RF_N3 <- train(
+				x = x_N_train,
+				y = y_N_train,
+					method = "rf", 
+					trControl = trainControl(method = "repeatedcv", number = 10, repeats=10), 
+					metric= "RMSE",
+					verbose = FALSE, 
+					tuneGrid = tunegrid_N3,
+					nodesize = c(20:21),   # tweaking the nodesize 
+					n.trees = c(4:50)*100)  # tweaking the number of trees
+
+  
+print(RF_N3) 
+ ```    
+		Random Forest 
+
+		580 samples
+		 10 predictor
+
+		No pre-processing
+		Resampling: Cross-Validated (10 fold, repeated 10 times) 
+		Summary of sample sizes: 520, 520, 521, 523, 523, 524, ... 
+		Resampling results across tuning parameters:
+
+		  mtry  RMSE       Rsquared   MAE      
+		  6     0.1455538  0.5264047  0.1120596
+		  7     0.1453908  0.5271161  0.1119148
+		  8     0.1454217  0.5269833  0.1119420
+		  9     0.1454443  0.5269140  0.1120085
+
+		RMSE was used to select the optimal model using the smallest value.
+		The final value used for the model was mtry = 7.
+
+
+
+## tuning RF 4
+## more adjustment/tweaking based on ranger's tuning information
+     
+```{r}
+tunegrid_N4 <- expand.grid(.mtry = c(7:9)) 
+
+RF_N4 <- train(
+				x = x_N_train,
+				y = y_N_train,
+					method = "rf", 
+					trControl = trainControl(method = "repeatedcv", number = 10, repeats=10), 
+					metric= "RMSE",
+					verbose = FALSE, 
+					tuneGrid = tunegrid_N4,
+					nodesize = c(20:21),   # tweaking the nodesize 
+					n.trees = seq(700, 1000, by = 25)) # tweaking the number of trees
+  
+print(RF_N4) 
+```     
+		Random Forest 
+
+		580 samples
+		 10 predictor
+
+		No pre-processing
+		Resampling: Cross-Validated (10 fold, repeated 10 times) 
+		Summary of sample sizes: 522, 522, 521, 522, 521, 524, ... 
+		Resampling results across tuning parameters:
+
+		  mtry  RMSE       Rsquared   MAE      
+		  7     0.1448527  0.5307546  0.1118998
+		  8     0.1448415  0.5309608  0.1119143
+		  9     0.1449059  0.5306659  0.1120084
+
+		RMSE was used to select the optimal
+		 model using the smallest value.
+		The final value used for the model was mtry
+		 = 8.
+
+
+# plot comparison for obtaining the RF final model
+     
+```{r}
+res_RF <- resamples(list(RF1 = RF_N, RF2 = RF_N2,  RF3 = RF_N3, RF4 = RF_N4))
+
+summary(res_RF)
+```     
+		Call:
+		summary.resamples(object = res_RF)
+
+		Models: RF1, RF2, RF3, RF4 
+		Number of resamples: 100 
+
+		MAE 
+				  Min.   1st Qu.    Median      Mean   3rd Qu.      Max. NAs
+		RF1 0.08678535 0.1036468 0.1106693 0.1115203 0.1195211 0.1381957    0
+		RF2 0.08533960 0.1040589 0.1097384 0.1118289 0.1198250 0.1397199    0
+		RF3 0.08542829 0.1049228 0.1105187 0.1119148 0.1195503 0.1495739    0
+		RF4 0.08798723 0.1042108 0.1125285 0.1119143 0.1200837 0.1382259    0
+
+		RMSE 
+				 Min.   1st Qu.    Median      Mean   3rd Qu.      Max. NAs
+		RF1 0.1161300 0.1340955 0.1457640 0.1450824 0.1534857 0.1766999    0
+		RF2 0.1163241 0.1346145 0.1446271 0.1451740 0.1538281 0.1788122    0
+		RF3 0.1108822 0.1362040 0.1436541 0.1453908 0.1539067 0.1906249    0
+		RF4 0.1130188 0.1334663 0.1452316 0.1448415 0.1556030 0.1843166    0
+
+		Rsquared 
+				 Min.   1st Qu.    Median      Mean   3rd Qu.      Max. NAs
+		RF1 0.3130603 0.4748650 0.5320347 0.5277631 0.5847963 0.6895062    0
+		RF2 0.3016938 0.4740132 0.5283095 0.5263998 0.5936698 0.7028609    0
+		RF3 0.2867953 0.4609650 0.5437131 0.5271161 0.5830833 0.7190867    0
+		RF4 0.2681768 0.4762526 0.5344751 0.5309608 0.5957494 0.6922782    0
+     
+```{r}		
+scales_RF <- list(x=list(relation="free"), y=list(relation="free"))
+
+bwplot(res_RF, scales=scales_RF)
+
+ggplot(res_RF, scales=scales_RF)
+
+res_RF$values %>% #extract the values
+  select(1, ends_with("Rsquared")) %>% #select the first column and all columns with a name ending with "Rsquared"
+  gather(model, Rsquared, -1) %>% #convert to long table
+  mutate(model = sub("~Rsquared", "", model)) %>% #leave just the model names
+  ggplot()+ #call ggplot
+  geom_boxplot(aes(x = Rsquared, y = model, fill=model)) -> plotres_RF #and plot the box plot
+
+plot_res_RF<- plotres_RF + scale_y_discrete(limits = c("RF1", "RF2", "RF3", "RF4"))+
+    scale_fill_viridis(discrete = TRUE) + theme_bw()  + 
+	theme(text=element_text(size=13),
+	axis.title.y=element_blank())+theme( legend.position="none") ## kesimpulan: RF4 is the best: stable (low deviance and moderate prediction)
+
+plot_res_RF
+```
+
+
+# Gradient Boosting Machine
+
+## notes for my beloved wife: I use 5-fold repeatedcv  for relieving computational burden. Feel sleepy and lonely without you tonight [-_-] wkwkwkwk. kangen
+## you can wait forever for 10-fold repeatedcv wkwkwkw, I choose not. kangen [''_'']
+
+# first step : fixing minobsinnode
+     
+```{r}     
+grid_gbm_N <-expand.grid(n.trees = seq(50, 1000, by = 50),
+			interaction.depth = c(1, 3, 5), 
+			shrinkage = c(.01, .1, .3, .5),
+			n.minobsinnode = c(3, 5, 7))
+			
+
+set.seed(1234)
+GBM_N1 <- train(
+				x = x_N_train,
+				y = y_N_train,
+	method 	= "gbm",
+	metric 	= "RMSE",
+	trControl = trainControl(method = "repeatedcv", number = 5, repeats=10),
+	tuneGrid = grid_gbm_N,
+	verbose = FALSE
+)
+
+GBM_N1$bestTune
+```     
+			n.trees interaction.depth shrinkage n.minobsinnode
+		137     850                 5      0.01              3
+
+#evaluate
+```{r}       
+ggplot(GBM_N1) ## my beloved wife, please analyze the graphs carefully. I found these:
+```  
+     
+# RMSE is lower and continued to stabilize at low shrinkage (0.01). 
+# RMSE is lower at high interaction.depth (5)
+# seemingly no difference in varying n.minobsinnode at interaction.depth = 5
+# but if we look more closely, lowest RMSE is obtained at n.minobsinnode = 3 and ntrees = 1000 with slightly declining trend. 
+# the opposite patterns are observed at higher n.minobsinnode
+
+# conclusion: we develop model parameterisation with: low shrinkage (0.01), high interaction.depth (5), low n.minobsinnode (3), more ntrees (>850)
+# we also try lowering the learning rate = shrinkage <0.01. suggested by Bradley https://bradleyboehmke.github.io/HOML/gbm.html
+# tune more of other parameters, i.e., n.minobsinnode < 3 or interaction.depth >5 are never suggested in literatures. I never read it
+
+# second step : try adding more trees. test if it can lower RMSE 
+     
+ ```{r}    
+grid_gbm_N2 <-expand.grid(n.trees = seq(500, 5000, by = 500),
+			interaction.depth = 5, 
+			shrinkage = c(.001, 0.005, .01),
+			n.minobsinnode = 3)
+			
+
+set.seed(1234)
+GBM_N2 <- train(
+				x = x_N_train,
+				y = y_N_train,
+	method 	= "gbm",
+	metric 	= "RMSE",
+	trControl = trainControl(method = "repeatedcv", number = 5, repeats=10),
+	tuneGrid = grid_gbm_N2,
+	verbose = FALSE
+)
+
+GBM_N2$bestTune
+```      
+		   n.trees interaction.depth shrinkage
+		14    2000                 5     0.005
+		   n.minobsinnode
+		14              3
+
+#evaluate
+     
+ggplot(GBM_N2) 
+``` 
+# GBM_N2$bestTune suggests that lowest RMSE is obtained at moderately low learning rate = shrinkage = 0.005 when n.trees = 2000.
+# but if we look at the curve, very small learning rate (shrinkage = 0.001) indicates lower RMSE at higher trees. 
+# we use this information to develop much trees >5000 to chect if the RMSE could beat the bestTune's sugggestion
+
+
+# third step : Okay. we try adding more trees >5000 . test if it can lower RMSE 
+```{r}     
+grid_gbm_N3 <-expand.grid(n.trees = seq(5000, 15000, by = 500),
+			interaction.depth = 5, 
+			shrinkage = 0.001,
+			n.minobsinnode = 3)
+			
+
+set.seed(1234)
+GBM_N3 <- train(
+				x = x_N_train,
+				y = y_N_train,
+	method 	= "gbm",
+	metric 	= "RMSE",
+	trControl = trainControl(method = "repeatedcv", number = 5, repeats=10),
+	tuneGrid = grid_gbm_N3,
+	verbose = FALSE
+)
+
+GBM_N3$bestTune
+```     
+		   n.trees interaction.depth shrinkage
+		10    9500                 5     0.001
+		   n.minobsinnode
+		10              3
+
+#evaluate
+     
+ ```{r}        
+ggplot(GBM_N3) 
+``` 
+     
+# the curve's inflection point located at n.trees = 9500. Adding more trees will higher the RMSE
+# if we look at GBM_N2$results, the lowest RMSE at n.trees = 2000 and shrinkage = 0.005 is 0.1541962  
+#  GBM_N3$results of n.trees = 9500 and shrinkage = 0.001 shows higher RMSE = 0.1542810. 
+# okay we accept GBM_N2's bestTune and set GBM_N2 as best model
+
+
+# we represent the parameterisation process by ggplot
+  
+```{r}
+res_GBM <- resamples(list(GBM1 = GBM_N1, GBM2 = GBM_N2, GBM3 = GBM_N3)) 
+summary(res_GBM)
+```      
+		Call:
+		summary.resamples(object = res_GBM)
+
+		Models: GBM1, GBM2, GBM3 
+		Number of resamples: 50 
+
+		MAE 
+				  Min.   1st Qu.    Median      Mean   3rd Qu.      Max. NAs
+		GBM1 0.1043253 0.1149655 0.1215468 0.1204990 0.1264961 0.1349979    0
+		GBM2 0.1035171 0.1146441 0.1209567 0.1203832 0.1267875 0.1350976    0 # best model
+		GBM3 0.1037050 0.1150322 0.1212224 0.1204138 0.1263579 0.1342789    0
+
+		RMSE 
+				  Min.   1st Qu.    Median      Mean   3rd Qu.      Max. NAs
+		GBM1 0.1356917 0.1467015 0.1535492 0.1542874 0.1620387 0.1751799    0
+		GBM2 0.1343394 0.1470077 0.1529707 0.1541962 0.1616542 0.1743286    0 # best model
+		GBM3 0.1349606 0.1468253 0.1530120 0.1542810 0.1617691 0.1739755    0
+
+		Rsquared 
+				  Min.   1st Qu.    Median      Mean   3rd Qu.      Max. NAs
+		GBM1 0.3203226 0.4248878 0.4703728 0.4652185 0.5064340 0.5963890    0
+		GBM2 0.3179806 0.4294322 0.4733646 0.4658446 0.5084679 0.6027787    0 # best model
+		GBM3 0.3187166 0.4300325 0.4691100 0.4652491 0.5065379 0.5965656    0
+
+```{r}	
+scales2 <- list(x=list(relation="free"), y=list(relation="free"))
+bwplot(res_GBM, scales=scales2)
+
+ggplot(res_GBM, scales=scales2)
+
+res_GBM$values %>% #extract the values
+  select(1, ends_with("Rsquared")) %>% #select the first column and all columns with a name ending with "Rsquared"
+  gather(model, Rsquared, -1) %>% #convert to long table
+  mutate(model = sub("~Rsquared", "", model)) %>% #leave just the model names
+  ggplot()+ #call ggplot
+  geom_boxplot(aes(x = Rsquared, y = model, fill=model)) -> plotres_GBM #and plot the box plot
+
+plot_res_GBM <- plotres_GBM + scale_y_discrete(limits = c("GBM1", "GBM2", "GBM3"))+ 
+    scale_fill_viridis(discrete = TRUE) + theme_bw()  + 
+	theme(text=element_text(size=13),
+	axis.title.y=element_blank())+theme( legend.position="none")  # best model = GBM_N2
+
+plot_res_GBM
+``` 
+     
+# from this final GBM model, lets develop full 10-fold-cv iterated 10 times
+     
+```{r}
+grid_gbm_N_final <-expand.grid(n.trees = 2000,
+			interaction.depth = 5, 
+			shrinkage =  0.005,
+			n.minobsinnode = 3)
+			
+
+set.seed(1234)
+GBM_N_final <- train(
+				x = x_N_train,
+				y = y_N_train,
+	method 	= "gbm",
+	metric 	= "RMSE",
+	trControl = trainControl(method = "repeatedcv", number = 10, repeats=10),
+	tuneGrid = grid_gbm_N_final,
+	verbose = FALSE
+)
+
+GBM_N_final
+```      
+		Stochastic Gradient Boosting 
+
+		580 samples
+		 10 predictor
+
+		No pre-processing
+		Resampling: Cross-Validated (10 fold, repeated 10 times) 
+		Summary of sample sizes: 522, 523, 523, 521, 522, 522, ... 
+		Resampling results:
+
+		  RMSE       Rsquared   MAE      
+		  0.1510938  0.4891869  0.1184477
+
+		Tuning parameter 'n.trees' was held constant at a value of 2000
+		Tuning parameter 'interaction.depth' was held constant at
+		 a value of 5
+		Tuning parameter 'shrinkage' was held constant at a value of 0.005
+		Tuning parameter 'n.minobsinnode' was
+		 held constant at a value of 3
+
+
+## extreeme gradient boosting
+
+# First step: Fixing nround, learning rate (eta), max tree depth
+
+```{r}     
+xgb_trc_N = trainControl(
+  method = "repeatedcv",
+  number = 5,  
+  #repeats = 10, # drop this to maximize the computational speed. Soooo lonely and sleepy. kangen [--_--]
+  allowParallel = TRUE,
+  verboseIter = FALSE,
+  returnData = FALSE
+)
+
+
+nrounds <- 1000
+xgbGrid_N1 <- expand.grid(
+  nrounds = seq(from = 200, to = nrounds, by = 50),
+  eta = c(0.025, 0.05, 0.1, 0.3),
+  max_depth = c(2, 3, 4, 5, 6),
+  gamma = 0,
+  colsample_bytree = 1,
+  min_child_weight = 1,
+  subsample = 1
+)
+
+
+set.seed(42) 
+xgb_N1 = train(
+				x = x_N_train,
+				y = y_N_train,
+	trControl = xgb_trc_N,
+	tuneGrid = xgbGrid_N1,
+	method = "xgbTree",
+	metric = 'RMSE',
+	verbosity = 0
+)
+
+xgb_N1$bestTune
+```     
+     
+		   nrounds max_depth   eta gamma colsample_bytree
+		35     200         4 0.025     0                1
+		   min_child_weight subsample
+		35                1         1
+
+#evaluate
+     
+```{r}     
+ggplot(xgb_N1)
+```      
+     
+# lowest RMSE is obtained at lowest eta = 0.025
+# All curves indicate lower nrounds (< 200)
+# better max tree depth is between 3 to 4
+
+
+# Second step: lower nrounds, set eta to 0.025,
+     
+```{r}
+nrounds2 <- 200
+xgbGrid_N2 <- expand.grid(
+  nrounds = seq(from = 20, to = nrounds2, by = 10),
+  eta = 0.025,
+  max_depth = c(3, 4, 5, 6),
+  gamma = 0,
+  colsample_bytree = 1,
+  min_child_weight = 1,
+  subsample = 1
+)
+
+set.seed(42) 
+xgb_N2 = train(
+				x = x_N_train,
+				y = y_N_train,
+	trControl = xgb_trc_N,
+	tuneGrid = xgbGrid_N2,
+	method = "xgbTree",
+	metric = 'RMSE',
+	verbosity = 0
+)
+
+xgb_N2$bestTune
+```      
+		   nrounds max_depth   eta gamma colsample_bytree
+		48     110         5 0.025     0                1
+		   min_child_weight subsample
+		48                1         1
+
+#evaluate
+     
+ ```{r}    
+ggplot(xgb_N2)
+```     
+     
+# low RMSE at nrounds = 100 - 150 
+# choose max_depth = 5
+
+
+# third step: fixing colsample_bytree, min_child_weight, and subsample. narrow nrounds
+     
+```{r}
+nrounds3 <- 150
+xgbGrid_N3 <- expand.grid(
+  nrounds = seq(from = 90, to = nrounds3, by = 5),
+  eta = 0.025,
+  max_depth = 5,
+  gamma = 0,
+  colsample_bytree = c(0.4, 0.6, 0.8, 1.0),
+  min_child_weight = c(1,2,3),
+  subsample = c(0.5, 0.75, 1.0)
+)
+
+set.seed(42) 
+xgb_N3 = train(
+				x = x_N_train,
+				y = y_N_train,
+	trControl = xgb_trc_N,
+	tuneGrid = xgbGrid_N3,
+	method = "xgbTree",
+	metric = 'RMSE',
+	verbosity = 0
+)
+
+xgb_N3$bestTune
+```      
+			nrounds max_depth   eta gamma colsample_bytree
+		267     120         5 0.025     0              0.8
+			min_child_weight subsample
+		267                1         1
+
+#evaluate
+     
+```{r}     
+ggplot(xgb_N3)
+``` 
+     
+# higher subsample (subsample = 1) significantly lower RMSE 
+# lowest and stable RMSE is obtained at colsample_bytree = 0.8
+# I cannot distinguish the differences betweeen min_child_weight's classess. it slightly indicates better RMSE at low rate. lets play more with it
+# based on the curves, adding more nrounds apparently lowering RMSE
+
+
+# fourth step: fixing min_child_weight. higher nrounds, also dont forget gamma.
+     
+```{r}
+nrounds4 <- 500
+xgbGrid_N4 <- expand.grid(
+  nrounds = seq(from = 100, to = nrounds4, by = 25),
+  eta = 0.025,
+  max_depth = 5,
+  gamma = c(0,1),
+  colsample_bytree = 0.8,
+  min_child_weight = c(2,3),
+  subsample = 1
+)
+
+set.seed(42) 
+xgb_N4 = train(
+				x = x_N_train,
+				y = y_N_train,
+	trControl = xgb_trc_N,
+	tuneGrid = xgbGrid_N4,
+	method = "xgbTree",
+	metric = 'RMSE',
+	verbosity = 0
+)
+
+xgb_N4$bestTune
+```      
+		  nrounds max_depth   eta gamma colsample_bytree
+		2     125         5 0.025     0              0.8
+		  min_child_weight subsample
+		2                2         1
+
+#evaluate
+     
+ ```{r}    
+ggplot(xgb_N4)
+``` 
+     
+# jebakan betmen. steep inclined curve after 125. try smooth the nrounds
+# worst RMSE at higher gamma
+# it is clear that min_child_weight = 2 is the winner. we apply that.
+
+
+
+# fifth step: smoothing and narrowing nrounds
+     
+```{r}
+nrounds5 <- 150
+xgbGrid_N5 <- expand.grid(
+  nrounds = seq(from = 100, to = nrounds5, by = 5),
+  eta = 0.025,
+  max_depth = 5,
+  gamma = 0,
+  colsample_bytree = 0.8,
+  min_child_weight = 2,
+  subsample = 1
+)
+
+set.seed(42) 
+xgb_N5 = train(
+				x = x_N_train,
+				y = y_N_train,
+	trControl = xgb_trc_N,
+	tuneGrid = xgbGrid_N5,
+	method = "xgbTree",
+	metric = 'RMSE',
+	verbosity = 0
+)
+
+xgb_N5$bestTune
+```      
+		  nrounds max_depth   eta gamma colsample_bytree
+		6     125         5 0.025     0              0.8
+		  min_child_weight subsample
+		6                2         1
+
+#evaluate
+     
+```{r}    
+ggplot(xgb_N5)
+``` 
+     
+# yes finally fe found it. lowest RMSE at nrounds = 125.
+# lets accept that xgb_N5 is the best XGB model that we succesfully tuned. 
+# dont forget to build full model using 10-fold repeated cv
+     
+```{r} 
+xgb_trc_N_final = trainControl(
+  method = "repeatedcv",
+  number = 10,  
+  repeats = 10, 
+  allowParallel = TRUE,
+  verboseIter = FALSE,
+  returnData = FALSE
+)
+
+
+xgbGrid_N_final <- expand.grid(
+  nrounds = 125,
+  eta = 0.025,
+  max_depth = 5,
+  gamma = 0,
+  colsample_bytree = 0.8,
+  min_child_weight = 2,
+  subsample = 1
+)
+
+set.seed(42) 
+xgb_N_final = train(
+				x = x_N_train,
+				y = y_N_train,
+	trControl = xgb_trc_N_final,
+	tuneGrid = xgbGrid_N_final,
+	method = "xgbTree",
+	metric = 'RMSE',
+	verbosity = 0
+)
+
+xgb_N_final
+```
+     
+		eXtreme Gradient Boosting 
+
+		No pre-processing
+		Resampling: Cross-Validated (10 fold, repeated 10 times) 
+		Summary of sample sizes: 521, 520, 523, 523, 522, 524, ... 
+		Resampling results:
+
+		  RMSE       Rsquared  MAE      
+		  0.1478065  0.512049  0.1151514
+
+		Tuning parameter 'nrounds' was held constant at a value of 125
+		Tuning parameter 'max_depth' was held constant at a value of
+		 0
+		Tuning parameter 'colsample_bytree' was held constant at a value of 0.8
+		Tuning parameter 'min_child_weight' was
+		 held constant at a value of 2
+		Tuning parameter 'subsample' was held constant at a value of 1
+
+
+#----------------------- Model Comparison -----------------------------------------
+
+# performance by calibration method (internally by 10-fold 10-repeated cross validation)
+     
+```{r}
+models_compare_N <- resamples(list(LM=tuned_lm_N, LogGLM=logGLM_N, MARS=mars_N, Cubist=N_Cub, TR=TR_N, RF=RF_N4, GBM = GBM_N_final, XGB = xgb_N_final))
+
+# Summary of the models performances
+summary(models_compare_N)
+```
+     
+		Call:
+		summary.resamples(object = models_compare_N)
+
+		Models: LM, LogGLM, MARS, Cubist, TR, RF, GBM, XGB 
+		Number of resamples: 100 
+
+		MAE 
+					 Min.   1st Qu.    Median      Mean   3rd Qu.      Max. NAs #dont forget to remove the ['] quotation mark
+		LM     0.11061821 0.1309966 0.1412411 0.1398228 0.1473372 0.1758979    0
+		LogGLM 0.09879114 0.1316129 0.1384781 0.1395219 0.1486843 0.1763885    0
+		MARS   0.10330424 0.1182906 0.1248024 0.1250399 0.1319009 0.1515724    0
+		Cubist 0.09178621 0.1077180 0.1147907 0.1149347 0.1221749 0.1386632    0
+		TR     0.09167131 0.1055548 0.1137943 0.1131887 0.1206045 0.1317243    0
+		RF     0.08798723 0.1042108 0.1125285 0.1119143 0.1200837 0.1382259    0
+		GBM    0.08734506 0.1085295 0.1174147 0.1184477 0.1272728 0.1492389    0
+		XGB    0.09173619 0.1084744 0.1149849 0.1151514 0.1218567 0.1388939    0
+
+		RMSE 
+					Min.   1st Qu.    Median      Mean   3rd Qu.      Max. NAs #dont forget to remove the ['] quotation mark
+		LM     0.1322874 0.1692474 0.1773018 0.1775884 0.1860786 0.2077783    0
+		LogGLM 0.1250368 0.1670489 0.1753877 0.1769493 0.1888596 0.2229911    0
+		MARS   0.1354917 0.1499764 0.1612762 0.1605581 0.1681772 0.1907863    0
+		Cubist 0.1196441 0.1390425 0.1508106 0.1495860 0.1582911 0.1793828    0
+		TR     0.1204096 0.1362030 0.1453971 0.1453791 0.1524267 0.1834648    0
+		RF     0.1130188 0.1334663 0.1452316 0.1448415 0.1556030 0.1843166    0
+		GBM    0.1166727 0.1414077 0.1508367 0.1510938 0.1614094 0.1873234    0
+		XGB    0.1204392 0.1380948 0.1483454 0.1478065 0.1575548 0.1804137    0
+
+		Rsquared 
+					 Min.   1st Qu.    Median      Mean   3rd Qu.      Max. NAs #dont forget to remove the ['] quotation mark
+		LM     0.11065617 0.2299062 0.2976014 0.2949831 0.3480513 0.5046122    0
+		LogGLM 0.09104735 0.2370367 0.2996314 0.3007785 0.3777015 0.5385121    0
+		MARS   0.23202573 0.3546141 0.4230885 0.4241412 0.4771833 0.6475080    0
+		Cubist 0.33259741 0.4443288 0.4959649 0.4996242 0.5553438 0.7359613    0
+		TR     0.32595981 0.4811521 0.5300253 0.5276882 0.5806733 0.7262551    0
+		RF     0.26817682 0.4762526 0.5344751 0.5309608 0.5957494 0.6922782    0
+		GBM    0.23621391 0.4335358 0.4864064 0.4891869 0.5461086 0.7329151    0
+		XGB    0.32879771 0.4539081 0.5131104 0.5120490 0.5708781 0.7516067    0
+
+
+```{r}
+scales <- list(x=list(relation="free"), y=list(relation="free"))
+bwplot(models_compare_N, scales=scales)
+
+ggplot(models_compare_N, scales=scales)
+
+models_compare_N$values %>% #extract the values
+  select(1, ends_with("RMSE")) %>% #select the first column and all columns with a name ending with "RMSE"
+  gather(model, RMSE, -1) %>% #convert to long table
+  mutate(model = sub("~RMSE", "", model)) %>% #leave just the model names
+  ggplot()+ #call ggplot
+  geom_boxplot(aes(x = RMSE, y = model, fill=model)) -> p1_N #and plot the box plot
+
+plot1_N <- p1_N + scale_y_discrete(limits = c("LM", "LogGLM", "MARS", "Cubist", "TR", "RF", "GBM", "XGB"))+
+    scale_fill_viridis(discrete = TRUE) + theme_bw() + ggtitle("N") +
+	theme(legend.position="none", axis.title.y = element_blank())	
+
+
+models_compare_N$values %>% #extract the values
+  select(1, ends_with("MAE")) %>% #select the first column and all columns with a name ending with "MAE"
+  gather(model, MAE, -1) %>% #convert to long table
+  mutate(model = sub("~MAE", "", model)) %>% #leave just the model names
+  ggplot()+ #call ggplot
+  geom_boxplot(aes(x = MAE, y = model, fill=model)) -> p2_N #and plot the box plot
+
+plot2_N <- p2_N + scale_y_discrete(limits = c("LM", "LogGLM", "MARS", "Cubist", "TR", "RF", "GBM", "XGB"))+
+    scale_fill_viridis(discrete = TRUE) + theme_bw() + 
+	theme(legend.position="none", axis.title.y = element_blank())	
+
+
+models_compare_N$values %>% #extract the values
+  select(1, ends_with("Rsquared")) %>% #select the first column and all columns with a name ending with "Rsquared"
+  gather(model, Rsquared, -1) %>% #convert to long table
+  mutate(model = sub("~Rsquared", "", model)) %>% #leave just the model names
+  ggplot()+ #call ggplot
+  geom_boxplot(aes(x = Rsquared, y = model, fill=model)) -> p3_N #and plot the box plot
+
+plot3_N <- p3_N + scale_y_discrete(limits = c("LM", "LogGLM", "MARS", "Cubist", "TR", "RF", "GBM", "XGB"))+
+    scale_fill_viridis(discrete = TRUE)  + theme_bw() +  
+	theme(legend.position="none", axis.title.y = element_blank())	
+
+plot1_N+plot2_N+plot3_N	
+```
+
+# performance by validation method (externally by the 30% validation data)
+     
+```{r}	
+preds_MLR_N <- predict(tuned_lm_N, testSet_N)
+preds_LOG_GLM_N <- predict(logGLM_N, testSet_N)
+preds_MARS_N<- predict(mars_N, testSet_N)
+preds_CUBIST_N <- predict(N_Cub, testSet_N)
+preds_TR_N <- predict(TR_N, testSet_N)
+preds_RF_N <- predict(RF_N4, testSet_N)
+preds_GBM_N <- predict(GBM_N_final, testSet_N)
+preds_XGB_N <- predict(xgb_N_final, as.matrix(x_N_test))
+
+
+MLR_df_n <- data.frame(	Rsq = R2(preds_MLR_N, y_N_test),  
+						RMSE = RMSE(preds_MLR_N, y_N_test),  
+						MAE = MAE(preds_MLR_N, y_N_test),
+						BIAS = Metrics::bias(y_N_test, preds_MLR_N)) %>% add_column(Model="MLR")
+
+LogGLM_df_n <- data.frame(	Rsq = R2(preds_LOG_GLM_N, y_N_test),  
+						RMSE = RMSE(preds_LOG_GLM_N, y_N_test),  
+						MAE = MAE(preds_LOG_GLM_N, y_N_test),
+						BIAS = Metrics::bias(y_N_test, preds_LOG_GLM_N))%>% add_column(Model="LogGLM")
+
+MARS_df_n <- data.frame(Rsq = R2(preds_MARS_N, y_N_test),  
+						RMSE = RMSE(preds_MARS_N, y_N_test),  
+						MAE = MAE(preds_MARS_N, y_N_test),
+						BIAS = Metrics::bias(y_N_test, preds_MARS_N))%>% add_column(Model="MARS")
+
+names(MARS_df_n)[names(MARS_df_n) == 'y'] <- 'Rsq'
+
+CUBIST_df_n <- data.frame(	Rsq = R2(preds_CUBIST_N, y_N_test),  
+						RMSE = RMSE(preds_CUBIST_N, y_N_test),  
+						MAE = MAE(preds_CUBIST_N, y_N_test),
+						BIAS = Metrics::bias(y_N_test, preds_CUBIST_N))%>% add_column(Model="CUBIST")
+
+TR_df_n <- data.frame(	Rsq = R2(preds_TR_N, y_N_test),  
+						RMSE = RMSE(preds_TR_N, y_N_test),  
+						MAE = MAE(preds_TR_N, y_N_test),
+						BIAS = Metrics::bias(y_N_test, preds_TR_N))%>% add_column(Model="TR")
+
+RF_df_n <- data.frame(	Rsq = R2(preds_RF_N, y_N_test),  
+						RMSE = RMSE(preds_RF_N, y_N_test),  
+						MAE = MAE(preds_RF_N, y_N_test),
+						BIAS = Metrics::bias(y_N_test, preds_RF_N))%>% add_column(Model="RF")
+						
+GBM_df_n <- data.frame(	Rsq = R2(preds_GBM_N, y_N_test),  
+						RMSE = RMSE(preds_GBM_N, y_N_test),  
+						MAE = MAE(preds_GBM_N, y_N_test),
+						BIAS = Metrics::bias(y_N_test, preds_GBM_N))%>% add_column(Model="GBM")					
+						
+XGB_df_n <- data.frame(	Rsq = R2(preds_XGB_N, y_N_test),  
+						RMSE = RMSE(preds_XGB_N, y_N_test),  
+						MAE = MAE(preds_XGB_N, y_N_test),
+						BIAS = Metrics::bias(y_N_test, preds_XGB_N))%>% add_column(Model="XGB")					
+
+
+merged_all_model_N <- bind_rows(MLR_df_n, LogGLM_df_n, MARS_df_n, CUBIST_df_n, TR_df_n, RF_df_n, GBM_df_n, XGB_df_n)
+
+merged_all_model_N 
+```     
+				Rsq      RMSE       MAE          BIAS  Model
+		1 0.2727537 0.1807582 0.1415677  0.0005179089    MLR
+		2 0.2781068 0.1800702 0.1406175  0.0003533802 LogGLM
+		3 0.3840015 0.1675690 0.1263361  0.0071198200   MARS
+		4 0.5139022 0.1496621 0.1120691  0.0036524161 CUBIST
+		5 0.4707519 0.1565284 0.1172435  0.0052168493     TR
+		6 0.4991785 0.1512586 0.1139574  0.0034435387     RF
+		7 0.4788841 0.1529305 0.1179545  0.0044659966    GBM
+		8 0.5011779 0.1498288 0.1154051 -0.0046032801    XGB
+	
+
+	
+# My beloved wife, I dont like the repetitive codes like above. it is soo boring 
+# Lets check if this repetitive processes can be automatically done by a wrapper function 
+
+# first Create a list of trained models
+     
+```{r}     
+models <- list(
+  MLR = tuned_lm_N,
+  LOG_GLM = logGLM_N,
+  MARS = mars_N,
+  CUBIST = N_Cub,
+  TR = TR_N,
+  RF = RF_N4,
+  GBM = GBM_N_final,
+  XGB = xgb_N_final
+)
+
+#  make wrapper function for predicting each model inside the list. 
+#  you can modified it to other nutrients
+predict_N <- function(models) {
+  predictions <- list()
+  for (model_name in names(models)) {
+    model <- models[[model_name]]
+    if (model_name == "XGB") {
+      predictions[[model_name]] <- predict(model, x_N_test)  # predicting by XGB needs to be separated. requires only predictors (x columns)
+    } else {
+      predictions[[model_name]] <- predict(model, newdata = testSet_N) # predicting by all other models are similar. requires predictors+N (x+y columns)
+    }															       # all prediction using validation/testing dataset (30% data)
+  }
+  return(predictions)
+}
+
+# Predict all models at once using the new function
+predictions <- predict_N(models)
+
+# Takes prediction's dataframe to be evaluated simultaneously: this is the tough ones
+evaluate_and_bind <- function(predictions, y_test) { # take the predicted y and observed y, 
+  models <- names(predictions)
+  eval_metrics <- map(models, function(model) {   
+    pred <- predictions[[model]]
+    data.frame(			# evaluate the model performance using validation/testing data (30% of dataset)
+      Rsq = R2(pred, y_test),
+      RMSE = RMSE(pred, y_test),
+      MAE = MAE(pred, y_test),
+      BIAS = Metrics::bias(y_test, pred),
+      Model = model
+    ) %>% 
+      rename_with(~ ifelse(. == "y", "Rsq", .)) # change y to Rsq for MARS model' performance
+  }) %>% 
+  bind_rows() #change the vector containing list to a single dataframe
+}
+
+# Finally, after all trials and errors
+eval_results <- evaluate_and_bind(predictions, y_N_test)
+```    
+
+				Rsq      RMSE       MAE          BIAS   Model
+		1 0.2727537 0.1807582 0.1415677  0.0005179089     MLR
+		2 0.2781068 0.1800702 0.1406175  0.0003533802 LOG_GLM
+		3 0.3840015 0.1675690 0.1263361  0.0071198200    MARS
+		4 0.5139022 0.1496621 0.1120691  0.0036524161  CUBIST
+		5 0.4707519 0.1565284 0.1172435  0.0052168493      TR
+		6 0.4991785 0.1512586 0.1139574  0.0034435387      RF
+		7 0.4788841 0.1529305 0.1179545  0.0044659966     GBM
+		8 0.5011779 0.1498288 0.1154051 -0.0046032801     XGB  
+
+
+
+
+# ----------------------------- MODEL EXPLANATION AND INTERPRETABILITY ---------------------------------------
+
+
+# Using Plot Variable Important/VI scores
+
+## some thoughts before continuing 
+## dont plot all VI scores. just taking the strongest models based on calibration and validation methods, plot their VI scores
+## combine the resulting plot with other nutrients
+
+## in N modelling (at model_compare), the strongest model based on the calibration method is RF.
+## moreover, Cubist and XGB perform well in predicting N at validation method. interestingly, RF is also at the top of the board 
+## from this information, we perform VI on Cubist, RF, and XGB. All VI input using validation (test) data
+     
+```{r}
+windowsFonts(Times=windowsFont("Times New Roman"))
+
+theme1v <- theme(title =element_text(family="Times", size=16),
+                axis.text.y=element_text(family="Times",size=16),
+                axis.text.x=element_text(family="Times",size=16),
+                axis.title.y=element_text(family="Times",size=16),
+                axis.title.x=element_blank())
+
+theme2v <- theme(title =element_text(family="Times", size=16),
+                axis.text.y=element_text(family="Times",size=16),
+                axis.text.x=element_text(family="Times",size=16),
+                axis.title.y=element_blank(),
+                axis.title.x=element_text(family="Times",size=16))
+
+theme3v <- theme(title =element_text(family="Times", size=16),
+                axis.text.y=element_text(family="Times",size=16),
+                axis.text.x=element_text(family="Times",size=16),
+                axis.title.y=element_blank(),
+                axis.title.x=element_blank())
+
+set.seed(42)  # for reproducibility
+vi_N_Cub <- vip(N_Cub, method = "permute", train= x_N_test, target =y_N_test, metric = "rsq", nsim = 1000,
+    pred_wrapper = predict, geom = "boxplot", 
+    mapping = aes_string(fill = "Variable"), 
+    aesthetics = list(color = "grey35")) + 
+  ggtitle("N-Cubist")  +
+	theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+	panel.background = element_blank(), axis.line = element_line(colour = "black")) +theme1v
+vi_N_Cub
+
+set.seed(42)  # for reproducibility
+vi_N_RF <- vip(RF_N4, method = "permute", train= x_N_test, target =y_N_test, metric = "rsq", nsim = 1000,
+    pred_wrapper = predict, geom = "boxplot", 
+    mapping = aes_string(fill = "Variable"), 
+    aesthetics = list(color = "grey35")) + 
+  ggtitle("N-RF")  +
+	theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+	panel.background = element_blank(), axis.line = element_line(colour = "black"))+ theme2v
+vi_N_RF
+
+
+set.seed(42)  # for reproducibility
+vi_N_XGB <- vip(xgb_N_final, method = "permute", train= x_N_test, target =y_N_test, metric = "rsq", nsim = 1000,
+    pred_wrapper = predict, geom = "boxplot", 
+    mapping = aes_string(fill = "Variable"), 
+    aesthetics = list(color = "grey35")) + 
+  ggtitle("N-XGB")  +
+	theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+	panel.background = element_blank(), axis.line = element_line(colour = "black"))+theme3v
+vi_N_XGB
+
+
+vi_N_Cub + vi_N_RF + vi_N_XGB
+```
+     
+## since all defined parameters in vip() are similar, I ask our good (and smart) friend to cast a wrapper function.
+## it is easy when we have a simplified, pre-determined function. such a neat code, yeay, we nailed it !!!
+     
+```{r}
+vip_N <- function(model, ...) {
+  vip(
+    model, 
+    method = "permute", 
+    train = x_N_test, 
+    target = y_N_test, 
+    metric = "rsq", 
+    nsim = 1000, 
+    pred_wrapper = predict, 
+    geom = "boxplot", 
+    mapping = aes_string(fill = "Variable"), 
+    aesthetics = list(color = "grey35"),
+  ) 
+}
+
+vi_N_Cub <- vip_N(N_Cub)+ 
+	ggtitle("N-Cubist")  +
+	theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+	panel.background = element_blank(), axis.line = element_line(colour = "black")) +theme1v
+
+vi_N_RF<- vip_N(RF_N4)+ 
+	ggtitle("N-RF")  +
+	theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+	panel.background = element_blank(), axis.line = element_line(colour = "black"))+ theme2v
+
+vi_N_XGB<- vip_N(xgb_N_final)+ 
+	ggtitle("N-XGB")  +
+	theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+	panel.background = element_blank(), axis.line = element_line(colour = "black"))+theme3v
+
+vi_N_Cub + vi_N_RF + vi_N_XGB
+```
+
+# Using Marginal Effects through Partial dependence plots (PDP) and individual conditional expectation (ICE) plots
+
+## I try to cast wrapper function myself. without his help [*_-]
+### *fails miserably, poor man, I ask for his help [--_--]
+     
+```{r}
+ICE_N <- function(model, pred.var, ...) {
+  partial(
+    model, 
+    pred.var = pred.var,
+    ice = TRUE, 
+    center = TRUE, 
+    plot = TRUE, 
+    rug = TRUE, 
+    alpha =  0.1, 
+    plot.engine = "ggplot2", 
+    train = x_N_train, 
+    type = "regression",
+    ...
+  ) 
+}
+
+
+head(x_N_train) #just for easily copy the column heads
+```     
+			  DC DT Depth Age_<6 Age_>15 Age_6-15 Thick_<3 Thick_>3 Season_Dry Season_Rainy
+		[1,] 150  4    70      0       0        1        1        0          1            0
+		[2,] 100  3    20      0       0        1        0        1          0            1
+		[3,]  75  3    40      1       0        0        0        1          0            1
+		[4,] 100  1    20      0       0        1        0        1          1            0
+		[5,] 150  1    40      1       0        0        0        1          0            1
+		[6,] 150  1    20      0       1        0        0        1          1            0
+
+```{r}
+Cub_ICE_N_DC <- ICE_N(N_Cub, pred.var = "DC")+ ylab("Prob. Pred. N")+ xlab("DC (m)")
+Cub_ICE_N_DT <- ICE_N(N_Cub, pred.var = "DT") +theme(axis.title.y=element_blank())+ xlab("DT (m)")
+Cub_ICE_N_Depth <- ICE_N(N_Cub, pred.var = "Depth")+theme(axis.title.y=element_blank())+ xlab("Depth (cm)")
+Cub_ICE_N_Age1 <-ICE_N(N_Cub, pred.var = "Age_<6")+theme(axis.title.y=element_blank())+ xlab("Age: <6")
+Cub_ICE_N_Age2 <-ICE_N(N_Cub, pred.var = "Age_>15")+theme(axis.title.y=element_blank())+ xlab("Age: >15")
+Cub_ICE_N_Age3 <-ICE_N(N_Cub, pred.var = "Age_6-15")+ ylab("Prob. Pred. N")+ xlab("Age: 6-15")
+Cub_ICE_N_Thick1 <-ICE_N(N_Cub, pred.var = "Thick_<3")+theme(axis.title.y=element_blank())+ xlab("Thick: <3")
+Cub_ICE_N_Thick2 <-ICE_N(N_Cub, pred.var = "Thick_>3")+theme(axis.title.y=element_blank())+ xlab("Thick: >3")
+Cub_ICE_N_Season1 <-ICE_N(N_Cub, pred.var = "Season_Dry")+theme(axis.title.y=element_blank())+ xlab("Season:Dry")
+Cub_ICE_N_Season2 <-ICE_N(N_Cub,  pred.var = "Season_Rainy")+theme(axis.title.y=element_blank())+ xlab("Season:Rainy")
+
+Cub_ICE_N_DC+Cub_ICE_N_DT+Cub_ICE_N_Depth+Cub_ICE_N_Age1+Cub_ICE_N_Age2+Cub_ICE_N_Age3+
+   Cub_ICE_N_Thick1+Cub_ICE_N_Thick2+Cub_ICE_N_Season1+Cub_ICE_N_Season2+ plot_layout(nrow=2)
+```
+
+
+# using Game Theory - Shapley Value using SHAP approach
+
+## make custom wrapper function by combining fastshap and shapviz packages
+## yess, we can get rid of many repetitive codes
+     
+```{r}
+shapviz_N <- function(model, ...) {
+  shapviz( 					# convert the fastshap object to more powerful and fast shapviz object
+    fastshap::explain( 		# perform SHAP approach using fastshap package
+      model, 
+      X = x_N_train,
+      nsim = 1000, 			# set Monte Carlo Simulation to 1000
+      pred_wrapper = predict,
+      shap_only = FALSE,
+      adjust = TRUE,
+      ...
+    )
+  )
+}
+
+
+sv_LM_N <- shapviz_N(tuned_lm_N)
+sv_LogGLM_N <- shapviz_N(logGLM_N)
+sv_Cubist_N <- shapviz_N(N_Cub)
+sv_TR_N <- shapviz_N(TR_N)
+sv_RF_N <- shapviz_N(RF_N4)
+sv_GBM_N <- shapviz_N(GBM_N_final)
+sv_XGB_N <- shapviz_N(xgb_N_final)
+```
+     
+## shap-based plotting
+
+## beeswarm Plot
+## make wrapper function
+
+```{r}
+bee_N <- function(model, color_bar_title, ...) {
+  shapviz::sv_importance(
+    model, 
+    kind = "beeswarm", 
+    show_numbers = FALSE, 
+	...
+  ) 
+}
+
+
+bee_LM_N <- bee_N(sv_LM_N, color_bar_title = NULL)+theme_bw()+ ggtitle("LM")+
+							theme(axis.text = element_text(size = 13),
+							axis.title = element_text(size = 13 ),
+							axis.title.x=element_blank(),legend.position = "none")
+							
+bee_LogGLM_N <- bee_N(sv_LogGLM_N)+	theme_bw()+ ggtitle("LogGLM")+
+							theme(axis.text = element_text(size = 13 ),
+							axis.title = element_text(size = 13 ),
+							axis.title.x=element_blank(),legend.position = "none")
+							
+bee_Cubist_N <- bee_N(sv_Cubist_N)+	theme_bw()+ ggtitle("Cubist") +
+							theme(axis.text = element_text(size = 13 ),
+							axis.title.x=element_blank())						
+
+
+bee_TR_N <- bee_N(sv_TR_N, color_bar_title=NULL)+ theme_bw()+ ggtitle("RF") +
+							theme(axis.text = element_text(size = 13 ),
+							axis.title = element_text(size = 13 ),
+							axis.title.x=element_blank(),legend.position = "none")
+
+bee_RF_N <- bee_N(sv_RF_N, color_bar_title=NULL)+ theme_bw()+ ggtitle("RF") +
+							theme(axis.text = element_text(size = 13 ),
+							axis.title = element_text(size = 13),legend.position = "none")
+							
+bee_GBM_N <- bee_N(sv_GBM_N)+ theme_bw()+ ggtitle("GBM")+
+							theme(axis.text = element_text(size = 13 ),
+							axis.title = element_text(size = 13),
+							legend.position = "none")
+							
+bee_XGB_N <- bee_N(sv_XGB_N)+ theme_bw()+ ggtitle("XGB")+
+							theme(axis.text = element_text(size = 13 ),
+							axis.title = element_text(size = 13 ),legend.position = "none")
+
+bee_LM_N+bee_LogGLM_N+bee_Cubist_N+bee_TR_N +bee_RF_N+bee_GBM_N+bee_XGB_N+plot_layout(ncol=3)
+```
