@@ -257,8 +257,8 @@ summary(logGLM_N)
 
 		Number of Fisher Scoring iterations: 4
 
-
 ## ------- Multivariate Adaptive regression spline  --------
+
 ```{r}
 hyper_grid_mars_N <- expand.grid(
   degree = 1:5, 
@@ -448,7 +448,7 @@ TR_N
 		The final value used for the model was cp = 0.0071
 
 
-# ------ random forest --------
+## ------ Random Forest --------
 ```{r}
 ## tuning RF 1
 
@@ -468,6 +468,7 @@ RF_N <- train(
 				   nodesize = 13,
 					ntree = 250,
                    trControl = trainControl(method = "repeatedcv", number = 10, repeats=10))
+				   
 RF_N
 ```     
 		Random Forest 
