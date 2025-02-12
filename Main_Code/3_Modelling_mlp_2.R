@@ -94,43 +94,52 @@ save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Pr
 load(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_06022025.RData')
 
 # 12. Plotting the Results -----------------------------------------------------
-# Convert scientific notation to numeric for better plotting
-grid_results_plot <- show_best(grid_results_N1, n = 50, metric = "rmse") %>%
-  mutate(penalty = log10(penalty),  # Convert to log scale
-         learn_rate = log10(learn_rate))  # Convert to log scale
+autoplot(grid_results_N1)& coord_cartesian(ylim = c(3000, 4000))
 
-# RMSE vs Hidden Units
-p1 <- ggplot(grid_results_plot, aes(x = hidden_units, y = mean)) +
-  geom_point() +
-  geom_smooth(method = "loess", se = FALSE, color = "blue") +
-  labs(title = "RMSE vs Hidden Units", x = "Hidden Units", y = "RMSE") +
-  ylim(0, 25000) +
-  theme_minimal()
+# check the rmse.
+# 1. higher hidden layers, lower rmse
+# 2. epochs at 1000 to 1500, likely to produce lower rmse
+# 3. penalty at -1 to -2.5, likely to produce lower rmse
+# 4. learn_rate at -1.5 to -1, likely to produce lower rmse
 
-# RMSE vs Epochs
-p2 <- ggplot(grid_results_plot, aes(x = epochs, y = mean)) +
-  geom_point() +
-  geom_smooth(method = "loess", se = FALSE, color = "red") +
-  labs(title = "RMSE vs Epochs", x = "Epochs", y = "RMSE") +
-  ylim(0, 25000) +
-  theme_minimal()
+# second try. change to latin hypercube sampling
 
-# RMSE vs Penalty (Log Scale)
-p3 <- ggplot(grid_results_plot, aes(x = penalty, y = mean)) +
-  geom_point() +
-  geom_smooth(method = "loess", se = FALSE, color = "green") +
-  labs(title = "RMSE vs Penalty (Log Scale)", x = "log10(Penalty)", y = "RMSE") +
-  ylim(0, 25000) +
-  theme_minimal()
+# ✅ Improved Grid Search with Latin Hypercube Sampling
+library(dials)
 
-# RMSE vs Learn Rate (Log Scale)
-p4 <- ggplot(grid_results_plot, aes(x = learn_rate, y = mean)) +
-  geom_point() +
-  geom_smooth(method = "loess", se = FALSE, color = "purple") +
-  labs(title = "RMSE vs Learning Rate (Log Scale)", x = "log10(Learning Rate)", y = "RMSE") +
-  ylim(0, 25000) +
-  theme_minimal()
+cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))
+registerDoParallel(cl)
 
-# Arrange in a grid
-p1 + p2 + p3 + p4 + plot_layout(ncol = 2)
+set.seed(123)
+folds_N1_1 <- vfold_cv(train_data_N, v = 5, repeats = 5)
 
+set.seed(123)
+param_grid_N1_1 <- grid_latin_hypercube(
+  epochs(range = c(1000, 1500)),
+  hidden_units(range = c(20, 40)),
+  penalty(range = c(-2.5, -1)),
+  learn_rate(range = c(-1.5, -1)),
+  size = 50  # Reduce total combinations
+)
+
+# ✅ Memory-Optimized Tuning
+grid_results_N1_1 <- tune_grid(
+  mlp_wflow_tune_N1,
+  resamples = folds_N1_1,
+  grid = param_grid_N1_1,
+  metrics = metric_set(yardstick::rmse, yardstick::mae),
+  control = control_grid(
+    verbose = TRUE,
+    parallel_over = "resamples",  # More memory efficient
+    extract = NULL,
+    save_pred = FALSE,
+    save_workflow = FALSE,
+    pkgs = c("brulee")
+  )
+)
+
+# ✅ Cleanup & Show Best
+stopCluster(cl)
+registerDoSEQ()
+
+show_best(grid_results_N1_1, n = 10, metric = "rmse")
