@@ -27,7 +27,8 @@ mlp_spec_tune_N4 <- mlp(
   epochs = tune(),
   hidden_units = tune(),
   penalty = tune(),
-  learn_rate = tune()
+  learn_rate = tune(),
+  activation = tune()
 ) %>%
   set_engine("brulee", validation = 0) %>%
   set_mode("regression")
@@ -47,23 +48,24 @@ folds_N4 <- vfold_cv(train_data_N, v = 5, repeats = 3)
 
 set.seed(123)
 param_grid_N4 <- expand.grid(
-  epochs = seq(500, 1500, length.out = 5),  
-  hidden_units = seq(5, 20, length.out = 6),  
-  penalty = seq(-4, -1, length.out = 4),  
-  learn_rate = seq(-3, -1, length.out = 4)  
+  epochs = seq(500, 1000, length.out = 3),  
+  activation = c("relu", "elu"),
+  hidden_units = seq(5, 15, length.out = 3),  
+  penalty = 0.1,  
+   learn_rate = seq(1e-4, 1e-2, length.out = 2)   
 )
 
 
-# 7. Fast Memory-Optimized Tuning with race_anova -----------------------------
-grid_results_N4 <- tune_race_anova(
+# 7. Fast Memory-Optimized Tuning with tune_grid -----------------------------
+grid_results_N4 <- tune_grid(
   mlp_wflow_tune_N4,
   resamples = folds_N4,
   grid = param_grid_N4,
   metrics = metric_set(yardstick::rmse, yardstick::mae),
-  control = control_race(
-    verbose_elim = TRUE,
-    save_pred = TRUE,       # Required for autoplot()
-    save_workflow = TRUE    # Enables extraction
+  control = control_grid(
+    verbose = TRUE,
+    save_pred = TRUE,  # Required for autoplot()
+    save_workflow = TRUE  # Optional, allows model extraction
   )
 )
 
