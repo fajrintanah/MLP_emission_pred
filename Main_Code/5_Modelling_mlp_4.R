@@ -38,15 +38,15 @@ registerDoParallel(cl)
 
 # 6. Randomized Grid Search ---------------------------------------------------
 set.seed(123)
-folds_N <- vfold_cv(train_data_N, v = 5, repeats = 10)
+folds_N <- vfold_cv(train_data_N, v = 5, repeats = 3)
 
 set.seed(123)
-param_grid_N1 <- grid_random(
-  epochs(range = c(500, 1500)),
-  hidden_units(range = c(5, 20)),
-  penalty(range = c(-4, -1)),
-  learn_rate(range = c(-3, -1)),
-  size = 50
+param_grid_N1 <- grid_regular(
+  epochs(seq(500, 1500, by = 250)),  # Generates 5 values: 500, 750, 1000, 1250, 1500
+  hidden_units(seq(5, 20, by = 3)),  # Generates 6 values: 5, 8, 11, 14, 17, 20
+  penalty(seq(-4, -1, length.out = 4)),  # 4 values in log scale
+  learn_rate(seq(-3, -1, length.out = 4)),  # 4 values in log scale
+  levels = c(5, 6, 4, 4)  # Define levels explicitly (Optional)
 )
 
 # 7. Fast Memory-Optimized Tuning with race_anova -----------------------------
