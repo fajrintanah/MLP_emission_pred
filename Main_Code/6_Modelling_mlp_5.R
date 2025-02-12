@@ -43,29 +43,33 @@ registerDoParallel(cl)
 
 # 6. Latin Hypercube Sampling -------------------------------------------------
 set.seed(123)
-folds_N5 <- vfold_cv(train_data_N5, v = 5, repeats = 3)
+folds_N5 <- vfold_cv(train_data_N, v = 5, repeats = 3)
+library(finetune)
 
-# Define hyperparameter ranges for Latin Hypercube Sampling
-param_ranges_N5 <- list(
-  epochs = c(500, 1000),  
-  activation = c("relu", "elu"),
-  hidden_units = c(5, 15),  
-  penalty = c(0.01, 0.1),  
-  learn_rate = c(1e-4, 1e-2)   
+# Specify the parameter ranges for tuning
+param_ranges_N5 <- parameters(
+  epochs(range = c(500, 2000)),  # Expanded range
+  hidden_units(range = c(5, 50)),  # More flexibility
+  activation(values = c("relu", "elu")),  # Specify categorical values explicitly
+  penalty(range = c(0.001, 1)),  # Wider range
+  learn_rate(range = c(1e-4, 1e-1))  # Expanded range
 )
 
-# 7. Latin Hypercube Sampling with tune_lhs() -------------------------------
-lhs_results_N5 <- tune_lhs(
+
+# Use tune_bayes for hyperparameter tuning
+set.seed(123)
+grid_results_N5 <- tune_grid(
   mlp_wflow_tune_N5,
   resamples = folds_N5,
-  param_info = param_ranges_N5,
-  metrics = metric_set(yardstick::rmse, yardstick::mae),
-  control = control_lhs(
-    verbose = TRUE,
-    save_pred = TRUE,  # Required for autoplot()
-    save_workflow = TRUE  # Optional, allows model extraction
+  grid = 20,  # Number of grid points (increase for better coverage)
+  metrics = metric_set(yardstick::rmse),
+  control = control_grid(verbose = TRUE)
   )
-)
+
+
+# Visualize results
+autoplot(grid_results_N5) + theme_minimal()
+
 
 # 8. Cleanup & Results --------------------------------------------------------
 stopCluster(cl)
