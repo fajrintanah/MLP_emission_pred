@@ -24,11 +24,11 @@ N_rec2 <- recipe(N ~ OP_Age + Thick + Season + D_Canal + D_OPT + Depth,
 N_rec_prepped2 <- prep(N_rec2, training = train_data_N)
 
 # 4. Process datasets ---------------------------------------------------------
-train_data_processed-N2 <- bake(N_rec_prepped2, new_data = train_data_N)
-test_data_processed2-N2 <- bake(N_rec_prepped2, new_data = test_data_N)
+train_data_processed_N2 <- bake(N_rec_prepped2, new_data = train_data_N)
+test_data_processed2_N2 <- bake(N_rec_prepped2, new_data = test_data_N)
 
 # 5. Verify processed data structure ------------------------------------------
-glimpse(train_data_processed-N2)
+glimpse(train_data_processed_N2)
 
 # 6. Lightweight Model Spec ---------------------------------------------------
 mlp_spec_tune_N2 <- mlp(
