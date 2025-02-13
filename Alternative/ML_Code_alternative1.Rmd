@@ -468,7 +468,7 @@ RF_N <- train(
 				   nodesize = 13,
 					ntree = 250,
                    trControl = trainControl(method = "repeatedcv", number = 10, repeats=10))
-				   
+
 RF_N
 ```     
 		Random Forest 
@@ -1599,7 +1599,7 @@ Cub_ICE_N_DC+Cub_ICE_N_DT+Cub_ICE_N_Depth+Cub_ICE_N_Age1+Cub_ICE_N_Age2+Cub_ICE_
 # using Game Theory - Shapley Value using SHAP approach
 
 ## make custom wrapper function by combining fastshap and shapviz packages
-## yess, we can get rid of many repetitive codes
+## yess, we can get rid of many repetitive codes wkwkwkwkw 
      
 ```{r}
 shapviz_N <- function(model, ...) {
