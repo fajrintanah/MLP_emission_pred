@@ -86,13 +86,52 @@ registerDoSEQ()
 # Show best combinations
 show_best(grid_results_N2, n = 10, metric = "rmse")
 
-# Final model training with best params
-final_model_N2 <- mlp_wflow_tune_N2 %>%
-  finalize_workflow(select_best(grid_results_N2, metric = "rmse")) %>%
-  fit(train_data_N)
+# 12. Visualize Results -------------------------------------------------------
+autoplot(grid_results_N2) & coord_cartesian(ylim = c(3000, 4000))
+# I found scattered results, with the rmse is likely to decrease as the numbers increasing
+# so maybe it needs more tuning by increasing the value of each hyperparameter
+# maybe the range must be more stretched
 
-# Lean test evaluation
-test_preds_N2 <- predict(final_model_N2, test_data_N) %>% 
-  bind_cols(test_data_N %>% select(N))
 
-test_preds_N2 %>% metrics(N, .pred)
+######### ------- Second try ------- #########
+
+# 8. Efficient Parallel Setup -------------------------------------------------
+cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))  # Safer core allocation
+registerDoParallel(cl)
+
+# 9. Randomized Grid Search ---------------------------------------------------
+set.seed(123)
+folds_N2_1 <- vfold_cv(train_data_N, v = 5)
+
+set.seed(456)
+param_grid_N2_1 <- grid_random(
+  epochs(range = c(1500, 10000)),
+  hidden_units(range = c(5, 50)),
+  penalty(range = c(-3, -1)),
+  learn_rate(range = c(-3,-0.3)),
+  size = 25  # maybe lower the random combinations
+)
+
+# 10. Memory-Optimized Tuning --------------------------------------------------
+grid_results_N2_1 <- tune_grid(
+  mlp_wflow_tune_N2,
+  resamples = folds_N2_1,
+  grid = param_grid_N2_1,
+  metrics = metric_set(yardstick::rmse, yardstick::mae),
+  control = control_grid(
+    verbose = TRUE,
+    parallel_over = "everything",
+    allow_par = TRUE,
+    extract = NULL,        # No model extracts
+    save_pred = FALSE,     # No predictions storage
+    save_workflow = FALSE, # No workflow copies
+    pkgs = c("brulee")     # Minimal worker packages
+  )
+)
+
+# 11. Cleanup & Results --------------------------------------------------------
+stopCluster(cl)
+registerDoSEQ()
+
+# Show best combinations
+show_best(grid_results_N2_1, n = 10, metric = "rmse")
