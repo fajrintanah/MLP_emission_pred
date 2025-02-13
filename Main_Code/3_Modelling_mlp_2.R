@@ -143,3 +143,64 @@ stopCluster(cl)
 registerDoSEQ()
 
 show_best(grid_results_N1_1, n = 10, metric = "rmse")
+
+save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_13022025.RData')
+
+
+# third try. narrow the rangen of all hyperparameters
+
+# ✅ Improved Grid Search with Latin Hypercube Sampling
+library(dials)
+
+cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))
+registerDoParallel(cl)
+
+set.seed(123)
+folds_N1_2 <- vfold_cv(train_data_N, v = 5, repeats = 5)
+
+set.seed(123)
+param_grid_N1_2 <- grid_latin_hypercube(
+  epochs(range = c(1000, 1500)),
+  hidden_units(range = c(35, 100)),
+  penalty(range = c(-2.0, -1.5)),
+  learn_rate(range = c(-1.5, -1)),
+  size = 50  # Reduce total combinations
+)
+
+# ✅ Memory-Optimized Tuning
+grid_results_N1_2 <- tune_grid(
+  mlp_wflow_tune_N1,
+  resamples = folds_N1_2,
+  grid = param_grid_N1_2,
+  metrics = metric_set(yardstick::rmse, yardstick::mae),
+  control = control_grid(
+    verbose = TRUE,
+    parallel_over = "resamples",  # More memory efficient
+    extract = NULL,
+    save_pred = FALSE,
+    save_workflow = FALSE,
+    pkgs = c("brulee")
+  )
+)
+
+# ✅ Cleanup & Show Best
+stopCluster(cl)
+registerDoSEQ()
+
+show_best(grid_results_N1_2, n = 10, metric = "rmse")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
