@@ -144,6 +144,9 @@ registerDoSEQ()
 
 show_best(grid_results_N1_1, n = 10, metric = "rmse")
 
+# ✅  Plotting the Results -----------------------------------------------------
+autoplot(grid_results_N1_1)& coord_cartesian(ylim = c(3000, 4000))
+
 save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_13022025.RData')
 
 
@@ -189,6 +192,64 @@ registerDoSEQ()
 
 show_best(grid_results_N1_2, n = 10, metric = "rmse")
 
+ ✅  Plotting the Results -----------------------------------------------------
+autoplot(grid_results_N1_2)& coord_cartesian(ylim = c(3000, 4000))
+
+# more hidden layers are likely to produce lower rmse
+# epoch 1000-1200 are likely to produce lower rmse
+# penalty -2 to -1.8 are likely to produce lower rmse
+# higher learn_rate (-1.2 - -1.0) are likely to produce lower rmse
+
+save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_14022025.RData')
+
+
+
+# fourth try. eventhough incremental, some hyperparameters needs to be adjusted
+
+# ✅ Improved Grid Search with Latin Hypercube Sampling
+library(dials)
+
+cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))
+registerDoParallel(cl)
+
+set.seed(123)
+folds_N1_3 <- vfold_cv(train_data_N, v = 5, repeats = 5)
+
+set.seed(123)
+param_grid_N1_3 <- grid_latin_hypercube(
+  epochs(range = c(1000, 1200)),
+  hidden_units(range = c(90, 250)),
+  penalty(range = c(-2.5, -1.8)),
+  learn_rate(range = c(-1.2, -0.1)),
+  size = 50  # Reduce total combinations
+)
+
+# ✅ Memory-Optimized Tuning
+grid_results_N1_3 <- tune_grid(
+  mlp_wflow_tune_N1,
+  resamples = folds_N1_3,
+  grid = param_grid_N1_3,
+  metrics = metric_set(yardstick::rmse, yardstick::mae),
+  control = control_grid(
+    verbose = TRUE,
+    parallel_over = "resamples",  # More memory efficient
+    extract = NULL,
+    save_pred = FALSE,
+    save_workflow = FALSE,
+    pkgs = c("brulee")
+  )
+)
+
+# ✅ Cleanup & Show Best
+stopCluster(cl)
+registerDoSEQ()
+
+show_best(grid_results_N1_3, n = 10, metric = "rmse")
+
+ ✅  Plotting the Results -----------------------------------------------------
+autoplot(grid_results_N1_3)& coord_cartesian(ylim = c(3000, 4000))
+
+save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_14022025.RData')
 
 
 
