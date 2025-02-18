@@ -14,7 +14,7 @@ test_data_N <- testing(data_split_N)
 # 2. Recipe Setup (Corrected) -------------------------------------------------
 # First define the recipe without immediate prep()
 N_rec1 <- recipe(N ~ OP_Age + Thick + Season + D_Canal + D_OPT + Depth,
-                data = train_data_N) %>%
+                      data = train_data_N) %>%
   # Convert character variables to factors first
   step_string2factor(all_nominal_predictors()) %>%  # Critical fix
   step_dummy(all_nominal_predictors(), one_hot = TRUE) %>%
@@ -192,7 +192,7 @@ registerDoSEQ()
 
 show_best(grid_results_N1_2, n = 10, metric = "rmse")
 
- ✅  Plotting the Results -----------------------------------------------------
+# ✅  Plotting the Results -----------------------------------------------------
 autoplot(grid_results_N1_2)& coord_cartesian(ylim = c(3000, 4000))
 
 # more hidden layers are likely to produce lower rmse
@@ -213,7 +213,7 @@ cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))
 registerDoParallel(cl)
 
 set.seed(123)
-folds_N1_3 <- vfold_cv(train_data_N, v = 5, repeats = 5)
+folds_N1_3 <- vfold_cv(train_data_N, v = 5)
 
 set.seed(123)
 param_grid_N1_3 <- grid_latin_hypercube(
@@ -221,7 +221,7 @@ param_grid_N1_3 <- grid_latin_hypercube(
   hidden_units(range = c(90, 250)),
   penalty(range = c(-2.5, -1.8)),
   learn_rate(range = c(-1.2, -0.1)),
-  size = 50  # Reduce total combinations
+  size = 25  # Reduce total combinations
 )
 
 # ✅ Memory-Optimized Tuning
@@ -246,22 +246,10 @@ registerDoSEQ()
 
 show_best(grid_results_N1_3, n = 10, metric = "rmse")
 
- ✅  Plotting the Results -----------------------------------------------------
+# ✅  Plotting the Results -----------------------------------------------------
 autoplot(grid_results_N1_3)& coord_cartesian(ylim = c(3000, 4000))
 
 save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_14022025.RData')
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# lowest RMSE at: 
+# 
