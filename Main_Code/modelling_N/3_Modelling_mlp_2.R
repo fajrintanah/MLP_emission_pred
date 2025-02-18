@@ -253,3 +253,70 @@ save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Pr
 
 # lowest RMSE at: 
 # 
+
+# fifth try. adjust activation function
+
+# ✅ change Model Spec ---------------------------------------------------
+mlp_spec_tune_N1_2 <- mlp(
+  epochs = tune(),
+  hidden_units = tune(),
+  penalty = tune(),
+  learn_rate = tune(),
+  activation = tune() # Add activation function
+) %>% 
+  set_engine("brulee", validation = 0) %>%
+  set_mode("regression")
+
+# ✅  integrate to the new Workflow --------------------------------------------------------
+mlp_wflow_tune_N1_2 <- workflow() %>%
+  add_recipe(N_rec1) %>%
+  add_model(mlp_spec_tune_N1_2)
+
+
+# ✅ Improved Grid Search with Latin Hypercube Sampling
+library(dials)
+
+cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))
+registerDoParallel(cl)
+
+set.seed(123)
+folds_N1_4 <- vfold_cv(train_data_N, v = 5)
+
+set.seed(123)
+param_grid_N1_4 <- crossing(
+  activation = c("relu", "elu", "tanh", "sigmoid"),  # Categorical values explicitly listed
+  grid_latin_hypercube(
+    epochs(range = c(1000, 1200)),
+    hidden_units(range = c(90, 250)),
+    penalty(range = c(-2.0, -1.8)),
+    learn_rate(range = c(-0.5, -0.1)),
+    size = 15  # Reduce total combinations
+  )
+)
+
+# ✅ Memory-Optimized Tuning
+grid_results_N1_4 <- tune_grid(
+  mlp_wflow_tune_N1_2,
+  resamples = folds_N1_4,
+  grid = param_grid_N1_4,
+  metrics = metric_set(yardstick::rmse, yardstick::mae),
+  control = control_grid(
+    verbose = TRUE,
+    parallel_over = "resamples",  # More memory efficient
+    extract = NULL,
+    save_pred = FALSE,
+    save_workflow = FALSE,
+    pkgs = c("brulee")
+  )
+)
+
+# ✅ Cleanup & Show Best
+stopCluster(cl)
+registerDoSEQ()
+
+show_best(grid_results_N1_4, n = 10, metric = "rmse")
+
+# ✅  Plotting the Results -----------------------------------------------------
+autoplot(grid_results_N1_4)& coord_cartesian(ylim = c(3000, 4000))
+
+save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_18022025.RData')
