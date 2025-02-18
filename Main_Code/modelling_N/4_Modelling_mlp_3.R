@@ -286,5 +286,73 @@ registerDoSEQ()
 # Show best combinations
 show_best(grid_results_N2_4, n = 10, metric = "rmse")
 
-autoplot(grid_results_N2_4)+coord_cartesian(ylim = c(3000, 3100))
+autoplot(grid_results_N2_4)+coord_cartesian(ylim = c(3050, 3100))
+
+load(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_18022025.RData')
+
+
+######### ------- sixth try ------- #########
+# try different activation function
+
+# 6. Lightweight Model Spec ---------------------------------------------------
+mlp_spec_tune_N2_1 <- mlp(
+  epochs = tune(),
+  hidden_units = tune(),
+  penalty = tune(),
+  learn_rate = tune(),
+  activation = tune()  # add activation function
+) %>% 
+  set_engine("brulee", validation = 0) %>%
+  set_mode("regression")
+
+# 7. integrate with new Workflow --------------------------------------------------------
+mlp_wflow_tune_N2_1 <- workflow() %>%
+  add_recipe(N_rec2) %>%
+  add_model(mlp_spec_tune_N2_1)
+
+# 8. Efficient Parallel Setup -------------------------------------------------
+cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))  # Safer core allocation
+registerDoParallel(cl)
+
+# 9. Randomized Grid Search ---------------------------------------------------
+set.seed(123)
+folds_N2_5 <- vfold_cv(train_data_N, v = 5)
+
+set.seed(456)
+param_grid_N2_5 <- crossing(
+  activation = c("relu", "elu", "tanh", "sigmoid"),  # Categorical values explicitly listed
+  grid_random(
+  epochs(range = c(1800, 2000)),
+  hidden_units(range = c(300, 500)),
+  penalty(range = c(-1.6, -1.57)),
+  learn_rate(range = c(-0.2,-0.1)),
+  size = 20  # maybe lower the random combinations
+  )
+)
+
+# 10. Memory-Optimized Tuning --------------------------------------------------
+grid_results_N2_5 <- tune_grid(
+  mlp_wflow_tune_N2_1,
+  resamples = folds_N2_5,
+  grid = param_grid_N2_5,
+  metrics = metric_set(yardstick::rmse, yardstick::mae),
+  control = control_grid(
+    verbose = TRUE,
+    parallel_over = "everything",
+    allow_par = TRUE,
+    extract = NULL,        # No model extracts
+    save_pred = FALSE,     # No predictions storage
+    save_workflow = FALSE, # No workflow copies
+    pkgs = c("brulee")     # Minimal worker packages
+  )
+)
+
+# 11. Cleanup & Results --------------------------------------------------------
+stopCluster(cl)
+registerDoSEQ()
+
+# Show best combinations
+show_best(grid_results_N2_5, n = 10, metric = "rmse")
+
+autoplot(grid_results_N2_5)+coord_cartesian(ylim = c(3050, 3100))
 
