@@ -230,8 +230,8 @@ summarize_stats_df <- function(data, columns = where(is.numeric)) {
       )
     )))) %>%
     pivot_longer(cols = everything(), names_to = "Variable", values_to = "Statistics") %>%
-    unnest(Statistics) %>%
-    pivot_wider(names_from = Metric, values_from = Value)
+    unnest(Statistics) %>% # nolint
+    pivot_wider(names_from = Metric, values_from = Value) # nolint # nolint
 }
 
 
