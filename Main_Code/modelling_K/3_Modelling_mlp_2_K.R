@@ -52,7 +52,6 @@ library(fastDummies)
 library(brulee )
 library(dials)
 
-# 1. Data Splitting -----------------------------------------------------------
 
 load(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_K.RData')
 
@@ -63,26 +62,27 @@ test_data_K <- testing(data_split_K)
 
 # 2. Recipe Setup (Corrected) -------------------------------------------------
 # First define the recipe without immediate prep()
-K_rec1 <- recipe(K ~ OP_Age + Thick + Season + D_Canal + D_OPT + Depth,
+K_rec2 <- recipe(K ~ OP_Age + Thick + Season + D_Canal + D_OPT + Depth,
                       data = train_data_K) %>%
   # Convert character variables to factors first
   step_string2factor(all_nominal_predictors()) %>%  # Critical fix
   step_dummy(all_nominal_predictors(), one_hot = TRUE) %>%
   step_zv(all_predictors()) %>%
-  step_normalize(all_numeric_predictors())
+  step_normalize(all_numeric_predictors()) %>%
+  step_interact(terms = ~ D_Canal:D_OPT:Depth)  # Add interaction terms
 
 # 3. Prepare recipe using training data ---------------------------------------
-K_rec_prepped1 <- prep(K_rec1, training = train_data_K)
+K_rec_prepped2 <- prep(K_rec2, training = train_data_K)
 
 # 4. Process datasets ---------------------------------------------------------
-train_data_processed_K1 <- bake(K_rec_prepped1, new_data = train_data_K)
-test_data_processed_K1 <- bake(K_rec_prepped1, new_data = test_data_K)
+train_data_processed_K2 <- bake(K_rec_prepped2, new_data = train_data_K)
+test_data_processed_K2 <- bake(K_rec_prepped2, new_data = test_data_K)
 
 # 5. Verify processed data structure ------------------------------------------
-glimpse(train_data_processed_K1)
+glimpse(train_data_processed_K2)
 
 # 6. Lightweight Model Spec ---------------------------------------------------
-mlp_spec_tune_K1 <- mlp(
+mlp_spec_tune_K2 <- mlp(
   epochs = tune(),
   hidden_units = tune(),
   penalty = tune(),
@@ -92,9 +92,9 @@ mlp_spec_tune_K1 <- mlp(
   set_mode("regression")
 
 # 7. Minimal Workflow --------------------------------------------------------
-mlp_wflow_tune_K1 <- workflow() %>%
-  add_recipe(K_rec1) %>%
-  add_model(mlp_spec_tune_K1)
+mlp_wflow_tune_K2 <- workflow() %>%
+  add_recipe(K_rec2) %>%
+  add_model(mlp_spec_tune_K2)
 
 # 8. Efficient Parallel Setup -------------------------------------------------
 cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))  # Safer core allocation
@@ -102,10 +102,10 @@ registerDoParallel(cl)
 
 # 9. Randomized Grid Search ---------------------------------------------------
 set.seed(123)
-folds_K1 <- vfold_cv(train_data_K, v = 5)
+folds_K2 <- vfold_cv(train_data_K, v = 5)
 
 set.seed(123)
-param_grid_K1 <- grid_latin_hypercube(
+param_grid_K2 <- grid_latin_hypercube(
   epochs(range = c(500, 1500)),
   hidden_units(range = c(5, 500)),
   penalty(range = c(-7, -0.1)),
@@ -114,10 +114,10 @@ param_grid_K1 <- grid_latin_hypercube(
 )
 
 # 10. Memory-Optimized Tuning --------------------------------------------------
-grid_results_K1 <- tune_grid(
+grid_results_K2 <- tune_grid(
   mlp_wflow_tune_K1,
-  resamples = folds_K1,
-  grid = param_grid_K1,
+  resamples = folds_K2,
+  grid = param_grid_K2,
   metrics = metric_set(yardstick::rmse),
   control = control_grid(
     verbose = TRUE,
@@ -133,47 +133,6 @@ grid_results_K1 <- tune_grid(
 # 11. Cleanup & Results --------------------------------------------------------
 stopCluster(cl)
 registerDoSEQ()
-
-# Show best combinations
-show_best(grid_results_K1, n = 10, metric = "rmse")
-
-
-save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_K1.RData')
-autoplot(grid_results_K1)
-
-# low rmse are in the range of 800 to 1250 (epoch)
-# low rmse are in the range of 400 to 500 (hidden units)
-# low rmse are in the range of -4 to -2 (penalty)
-# low rmse are in the range of -3 to -1 (learn rate)
-
-
-##---------- second try --------------------------------------------------------------------
-
-set.seed(123)
-param_grid_K2 <- grid_latin_hypercube(
-  epochs(range = c(800, 1250)),
-  hidden_units(range = c(400, 500)),
-  penalty(range = c(-4, -2)),
-  learn_rate(range = c(-3, -1)),
-  size = 15  # 15 random combinations 
-)
-
-# 10. Memory-Optimized Tuning --------------------------------------------------
-grid_results_K2 <- tune_grid(
-  mlp_wflow_tune_K1,
-  resamples = folds_K1,
-  grid = param_grid_K2,
-  metrics = metric_set(yardstick::rmse),
-  control = control_grid(
-    verbose = TRUE,
-    parallel_over = "everything",
-    allow_par = TRUE,
-    extract = NULL,        # No model extracts
-    save_pred = FALSE,     # No predictions storage
-    save_workflow = FALSE, # No workflow copies
-    pkgs = c("brulee")     # Minimal worker packages
-  )
-)
 
 # Show best combinations
 show_best(grid_results_K2, n = 10, metric = "rmse")
