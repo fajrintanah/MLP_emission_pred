@@ -316,7 +316,10 @@ registerDoSEQ()
 
 show_best(grid_results_N1_4, n = 10, metric = "rmse")
 
+
 # ✅  Plotting the Results -----------------------------------------------------
 autoplot(grid_results_N1_4)& coord_cartesian(ylim = c(3000, 4000))
 
 save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_18022025.RData')
+
+## the best mlp model so far for N
