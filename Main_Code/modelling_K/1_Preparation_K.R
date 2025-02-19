@@ -56,3 +56,8 @@ Data_K <- R_macro_rev %>%
 str(Data_K)
 
 EL_Data_K2 <- Data_K
+
+save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_K.RData')
+
+
+
