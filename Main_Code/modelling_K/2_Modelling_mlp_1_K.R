@@ -192,4 +192,64 @@ registerDoSEQ()
 
 
 # Show best combinations
-show_best(grid_results_K2, n = 10, metric = "rmse")
+show_best(grid_results_K2, n = 10, metric = "rmse") 
+
+save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_K1.RData')
+
+autoplot(grid_results_K2)
+
+# low rmse are in the range of 1100 to 1200 (epoch)
+# low rmse are in the range of 400 to 450 (hidden units)
+# low rmse are in the range of -3.5 to -2.5 (penalty)
+# low rmse are in the range of -3 to -2.5 (learn rate)
+
+
+##---------- third try --------------------------------------------------------------------
+
+# 8. Efficient Parallel Setup -------------------------------------------------
+cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))  # Safer core allocation
+registerDoParallel(cl)
+
+
+set.seed(123)
+param_grid_K3 <- grid_latin_hypercube(
+  epochs(range = c(1100, 1200)),
+  hidden_units(range = c(400, 450)),
+  penalty(range = c(-3.5, -2.5)),
+  learn_rate(range = c(-3, -2.5)),
+  size = 15  # 15 random combinations 
+)
+
+# 10. Memory-Optimized Tuning --------------------------------------------------
+grid_results_K3 <- tune_grid(
+  mlp_wflow_tune_K1,
+  resamples = folds_K1,
+  grid = param_grid_K3,
+  metrics = metric_set(yardstick::rmse),
+  control = control_grid(
+    verbose = TRUE,
+    parallel_over = "everything",
+    allow_par = TRUE,
+    extract = NULL,        # No model extracts
+    save_pred = FALSE,     # No predictions storage
+    save_workflow = FALSE, # No workflow copies
+    pkgs = c("brulee")     # Minimal worker packages
+  )
+)
+
+
+# 11. Cleanup & Results --------------------------------------------------------
+stopCluster(cl)
+registerDoSEQ()
+
+
+# Show best combinations
+show_best(grid_results_K3, n = 10, metric = "rmse")
+
+save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_K1.RData')
+
+autoplot(grid_results_K3)
+
+
+
+
