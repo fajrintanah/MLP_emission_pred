@@ -356,3 +356,56 @@ show_best(grid_results_N2_5, n = 10, metric = "rmse")
 
 autoplot(grid_results_N2_5)+coord_cartesian(ylim = c(3050, 3100))
 
+#----------------------- seventh try ---------------------------------------
+# change grid_random to grid_latin_hypercube (last try)
+
+# ✅ Improved Grid Search with Latin Hypercube Sampling
+library(dials)
+
+# 8. Efficient Parallel Setup -------------------------------------------------
+cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))  # Safer core allocation
+registerDoParallel(cl)
+
+# 9. Randomized Grid Search ---------------------------------------------------
+set.seed(123)
+folds_N2_5 <- vfold_cv(train_data_N, v = 5)
+
+set.seed(456)
+param_grid_N2_6 <- crossing(
+  activation = c("relu", "elu", "tanh", "sigmoid"),  # Categorical values explicitly listed
+  grid_latin_hypercube(
+  epochs(range = c(1800, 2000)),
+  hidden_units(range = c(300, 500)),
+  penalty(range = c(-1.6, -1.57)),
+  learn_rate(range = c(-0.2,-0.1)),
+  size = 20  # maybe lower the random combinations
+  )
+)
+
+# 10. Memory-Optimized Tuning --------------------------------------------------
+grid_results_N2_6 <- tune_grid(
+  mlp_wflow_tune_N2_1,
+  resamples = folds_N2_5,
+  grid = param_grid_N2_6,
+  metrics = metric_set(yardstick::rmse, yardstick::mae),
+  control = control_grid(
+    verbose = TRUE,
+    parallel_over = "everything",
+    allow_par = TRUE,
+    extract = NULL,        # No model extracts
+    save_pred = FALSE,     # No predictions storage
+    save_workflow = FALSE, # No workflow copies
+    pkgs = c("brulee")     # Minimal worker packages
+  )
+)
+
+# 11. Cleanup & Results --------------------------------------------------------
+stopCluster(cl)
+registerDoSEQ()
+
+# Show best combinations
+show_best(grid_results_N2_6, n = 10, metric = "rmse")
+
+autoplot(grid_results_N2_6)+coord_cartesian(ylim = c(3050, 3100))
+
+
