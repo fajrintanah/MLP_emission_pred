@@ -408,5 +408,10 @@ show_best(grid_results_N2_6, n = 10, metric = "rmse")
 
 autoplot(grid_results_N2_6)+coord_cartesian(ylim = c(3050, 3100))
 
+
+save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025.RData')
+
+#
+
 ## closing this alternative due to higher RMSE compared to the mlp_2
 ## it seems that adding complexities from the interaction did not improve the model
