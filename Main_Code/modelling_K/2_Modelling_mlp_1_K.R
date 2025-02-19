@@ -139,6 +139,7 @@ show_best(grid_results_K1, n = 10, metric = "rmse")
 
 
 save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_K1.RData')
+
 autoplot(grid_results_K1)
 
 # low rmse are in the range of 800 to 1250 (epoch)
@@ -148,6 +149,15 @@ autoplot(grid_results_K1)
 
 
 ##---------- second try --------------------------------------------------------------------
+
+
+load(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_K1.RData')
+
+
+# 8. Efficient Parallel Setup -------------------------------------------------
+cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))  # Safer core allocation
+registerDoParallel(cl)
+
 
 set.seed(123)
 param_grid_K2 <- grid_latin_hypercube(
@@ -174,6 +184,12 @@ grid_results_K2 <- tune_grid(
     pkgs = c("brulee")     # Minimal worker packages
   )
 )
+
+
+# 11. Cleanup & Results --------------------------------------------------------
+stopCluster(cl)
+registerDoSEQ()
+
 
 # Show best combinations
 show_best(grid_results_K2, n = 10, metric = "rmse")
