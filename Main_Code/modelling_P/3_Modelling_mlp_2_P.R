@@ -142,6 +142,9 @@ show_best(grid_results_P2, n = 10, metric = "rmse")
 # penalty best (-3 to -1)
 # learn_rate best (-2 to -01)
 
+
+### ------------------ second try. -------------------------------
+
 # Define a new parameter grid based on the best ranges
 param_grid_P2_1 <- grid_latin_hypercube(
   epochs(range = c(900, 1100)),
@@ -155,7 +158,6 @@ param_grid_P2_1 <- grid_latin_hypercube(
 mlp_wflow_tune_P2_1 <- workflow() %>%
   add_recipe(P_rec2) %>%
   add_model(mlp_spec_tune_P2)
-
 
 # 8. Efficient Parallel Setup -------------------------------------------------
 cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))  # Safer core allocation
@@ -178,7 +180,6 @@ grid_results_P2_1 <- tune_grid(
     pkgs = c("brulee")     # Minimal worker packages
   )
 )
-
 
 # 11. Cleanup & Results --------------------------------------------------------
 stopCluster(cl)
