@@ -136,3 +136,54 @@ registerDoSEQ()
 
 # Show best combinations
 show_best(grid_results_P2, n = 10, metric = "rmse")
+
+# epoch best (900 to 1100)
+# hidden_units best (400 to 450)
+# penalty best (-3 to -1)
+# learn_rate best (-2 to -01)
+
+# Define a new parameter grid based on the best ranges
+param_grid_P2_1 <- grid_latin_hypercube(
+  epochs(range = c(900, 1100)),
+  hidden_units(range = c(400, 450)),
+  penalty(range = c(-3, -1)),
+  learn_rate(range = c(-2, -0.1)),
+  size = 15  # 15 random combinations 
+)
+
+# Create a new workflow for the refined grid search
+mlp_wflow_tune_P2_1 <- workflow() %>%
+  add_recipe(P_rec2) %>%
+  add_model(mlp_spec_tune_P2)
+
+
+# 8. Efficient Parallel Setup -------------------------------------------------
+cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))  # Safer core allocation
+registerDoParallel(cl)
+
+# Perform the grid search with the refined parameter grid
+set.seed(123)
+grid_results_P2_1 <- tune_grid(
+  mlp_wflow_tune_P2_1,
+  resamples = folds_P2,
+  grid = param_grid_P2_1,
+  metrics = metric_set(yardstick::rmse),
+  control = control_grid(
+    verbose = TRUE,
+    parallel_over = "everything",
+    allow_par = TRUE,
+    extract = NULL,        # No model extracts
+    save_pred = FALSE,     # No predictions storage
+    save_workflow = FALSE, # No workflow copies
+    pkgs = c("brulee")     # Minimal worker packages
+  )
+)
+
+
+# 11. Cleanup & Results --------------------------------------------------------
+stopCluster(cl)
+registerDoSEQ()
+
+# Show best combinations for the refined grid search
+show_best(grid_results_P2_1, n = 10, metric = "rmse")
+
