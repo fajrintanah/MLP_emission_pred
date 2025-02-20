@@ -139,6 +139,7 @@ show_best(grid_results_K1, n = 10, metric = "rmse")
 
 
 save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_K1.RData')
+
 autoplot(grid_results_K1)
 
 # low rmse are in the range of 800 to 1250 (epoch)
@@ -148,6 +149,15 @@ autoplot(grid_results_K1)
 
 
 ##---------- second try --------------------------------------------------------------------
+
+
+load(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_K1.RData')
+
+
+# 8. Efficient Parallel Setup -------------------------------------------------
+cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))  # Safer core allocation
+registerDoParallel(cl)
+
 
 set.seed(123)
 param_grid_K2 <- grid_latin_hypercube(
@@ -175,5 +185,136 @@ grid_results_K2 <- tune_grid(
   )
 )
 
+
+# 11. Cleanup & Results --------------------------------------------------------
+stopCluster(cl)
+registerDoSEQ()
+
+
 # Show best combinations
-show_best(grid_results_K2, n = 10, metric = "rmse")
+show_best(grid_results_K2, n = 10, metric = "rmse") 
+
+save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_K1.RData')
+
+autoplot(grid_results_K2)
+
+# low rmse are in the range of 1100 to 1200 (epoch)
+# low rmse are in the range of 400 to 450 (hidden units)
+# low rmse are in the range of -3.5 to -2.5 (penalty)
+# low rmse are in the range of -3 to -2.5 (learn rate)
+
+
+##---------- third try --------------------------------------------------------------------
+
+# 8. Efficient Parallel Setup -------------------------------------------------
+cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))  # Safer core allocation
+registerDoParallel(cl)
+
+
+set.seed(123)
+param_grid_K3 <- grid_latin_hypercube(
+  epochs(range = c(1100, 1200)),
+  hidden_units(range = c(400, 450)),
+  penalty(range = c(-3.5, -2.5)),
+  learn_rate(range = c(-3, -2.5)),
+  size = 15  # 15 random combinations 
+)
+
+# 10. Memory-Optimized Tuning --------------------------------------------------
+grid_results_K3 <- tune_grid(
+  mlp_wflow_tune_K1,
+  resamples = folds_K1,
+  grid = param_grid_K3,
+  metrics = metric_set(yardstick::rmse),
+  control = control_grid(
+    verbose = TRUE,
+    parallel_over = "everything",
+    allow_par = TRUE,
+    extract = NULL,        # No model extracts
+    save_pred = FALSE,     # No predictions storage
+    save_workflow = FALSE, # No workflow copies
+    pkgs = c("brulee")     # Minimal worker packages
+  )
+)
+
+# 11. Cleanup & Results --------------------------------------------------------
+stopCluster(cl)
+registerDoSEQ()
+
+# Show best combinations
+show_best(grid_results_K3, n = 10, metric = "rmse")
+
+save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_K1.RData')
+
+autoplot(grid_results_K3)
+# low rmse are in the range of 1125 to 1175 (epoch)
+# low rmse are in the range of 430 to 450 (hidden units)
+# low rmse are in the range of -3.25 to -2.75 (penalty)
+# low rmse are in the range of -2.8 to -2.6 (learn rate)
+
+##---------- fourth try --------------------------------------------------------------------
+
+# narrows the hyperparameters and tune activation function
+
+# 6. Lightweight Model Spec ---------------------------------------------------
+mlp_spec_tune_K2 <- mlp(
+  epochs = tune(),
+  hidden_units = tune(),
+  penalty = tune(),
+  learn_rate = tune(),
+  activation = tune() # Add activation function
+) %>% 
+  set_engine("brulee", validation = 0) %>%
+  set_mode("regression")
+
+# 7. Minimal Workflow --------------------------------------------------------
+mlp_wflow_tune_K2 <- workflow() %>%
+  add_recipe(K_rec1) %>%
+  add_model(mlp_spec_tune_K2)
+
+# 8. Efficient Parallel Setup -------------------------------------------------
+cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))  # Safer core allocation
+registerDoParallel(cl)
+
+set.seed(123)
+param_grid_K4 <- crossing(
+  activation = c("relu", "elu", "tanh", "sigmoid"),
+  grid_latin_hypercube(
+  epochs(range = c(1125, 1175)),
+  hidden_units(range = c(430, 450)),
+  penalty(range = c(-3.25, -2.75)),
+  learn_rate(range = c(-2.8, -2.6)),
+  size = 15  # 15 random combinations 
+  )
+)
+# 10. Memory-Optimized Tuning --------------------------------------------------
+grid_results_K4 <- tune_grid(
+  mlp_wflow_tune_K2,
+  resamples = folds_K1,
+  grid = param_grid_K4,
+  metrics = metric_set(yardstick::rmse),
+  control = control_grid(
+    verbose = TRUE,
+    parallel_over = "everything",
+    allow_par = TRUE,
+    extract = NULL,        # No model extracts
+    save_pred = FALSE,     # No predictions storage
+    save_workflow = FALSE, # No workflow copies
+    pkgs = c("brulee")     # Minimal worker packages
+  )
+)
+
+# 11. Cleanup & Results --------------------------------------------------------
+stopCluster(cl)
+registerDoSEQ()
+
+# Show best combinations
+show_best(grid_results_K4, n = 10, metric = "rmse")
+
+save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_K1.RData')
+
+autoplot(grid_results_K4)
+
+
+
+
