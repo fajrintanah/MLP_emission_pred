@@ -136,3 +136,6 @@ registerDoSEQ()
 
 # Show best combinations
 show_best(grid_results_K2, n = 10, metric = "rmse")
+
+save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_K2.RData')
+
