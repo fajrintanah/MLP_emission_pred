@@ -238,4 +238,17 @@ registerDoSEQ()
 # Show best combinations for the refined grid search
 show_best(grid_results_P2_2, n = 10, metric = "rmse")
 
+ save.image("D:/Research/Modelling_R_P/20 FEB 2025.RData")
+
+autoplot(grid_results_P2_2)
+ 
+#best epoch 1014
+#hidden_unit 426
+#learning_rate 0.754
+#penalty 0.0152
+#mean RMSE = 624 std 57.8
+
+# Closing this workflow
+#t
+
 
