@@ -194,6 +194,7 @@ show_best(grid_results_P2_1, n = 10, metric = "rmse")
 
 ##### third try ------------------------------------------
 
+load(file="D:/Research/Modelling_R_P/20 FEB 2025.RData")
 # Define a new parameter grid based on the refined best ranges
 param_grid_P2_2 <- grid_latin_hypercube(
   epochs(range = c(1000, 1050)),
