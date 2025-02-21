@@ -1,9 +1,3 @@
-# Load required packages
-library(tidymodels)
-library(brulee)
-library(yardstick)
-library(doParallel)
-library(rsample)
 
 library(tidyverse) # plotting and manipulation
 library(grid) # combining plots
@@ -52,19 +46,62 @@ library(fastDummies)
 library(brulee )
 library(dials)
 
-# 1. Data Splitting -----------------------------------------------------------
 
-load(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_P.RData')
+# load file fajrin
+load(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_K2.RData')
 
+
+library(readxl)
+R_macro <- read_excel("E:/Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data/R_macro.xlsx", 
+    col_types = c("text", "text", "skip", 
+        "text", "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric"))
+str(R_macro)
+
+# EDA/exploratory Data Analysis
+
+# EDA/exploratory Data Analysis
+remove_outliers_iqr <- function(data, col_range) {
+  data %>%
+    mutate(across(all_of(names(data)[col_range]), ~ {
+      x <- .[. != 0]  # Exclude 0s before computing quantiles
+      q1 <- quantile(x, 0.25, na.rm = TRUE)
+      q3 <- quantile(x, 0.75, na.rm = TRUE)
+      iqr <- q3 - q1
+
+      ifelse(. == 0 | . > q3 + 1.5 * iqr | . < q1 - 1.5 * iqr, NA_real_, .)
+    }))
+}
+
+# Apply the function to columns 7 to 15
+R_macro_rev <- remove_outliers_iqr(R_macro, 7:15)
+
+str(R_macro_rev)
+
+
+# Select Mg dataset -----------------------------------------------------------
+str(R_macro_rev)
+
+Data_Mg <- R_macro_rev %>% 
+                select(-c(12:15)) %>% 
+                select(-c(7:10))
+
+str(Data_Mg)
+
+EL_Data_Mg2 <- Data_Mg
+
+# 1. Splitting data--------------------------------------------------------------
 set.seed(123)
-data_split_P <- initial_split(EL_Data_P2, prop = 0.7)
-train_data_P <- training(data_split_P)
-test_data_P <- testing(data_split_P)
+data_split_Mg <- initial_split(EL_Data_Mg2, prop = 0.7)
+train_data_Mg <- training(data_split_Mg)
+test_data_Mg <- testing(data_split_Mg)
 
 # 2. Recipe Setup (Corrected) -------------------------------------------------
 # First define the recipe without immediate prep()
-P_rec1 <- recipe(P ~ OP_Age + Thick + Season + D_Canal + D_OPT + Depth,
-                      data = train_data_P) %>%
+Mg_rec1 <- recipe(Mg ~ OP_Age + Thick + Season + D_Canal + D_OPT + Depth,
+                      data = train_data_Mg) %>%
   # Convert character variables to factors first
   step_string2factor(all_nominal_predictors()) %>%  # Critical fix
   step_dummy(all_nominal_predictors(), one_hot = TRUE) %>%
@@ -72,17 +109,17 @@ P_rec1 <- recipe(P ~ OP_Age + Thick + Season + D_Canal + D_OPT + Depth,
   step_normalize(all_numeric_predictors())
 
 # 3. Prepare recipe using training data ---------------------------------------
-P_rec_prepped1 <- prep(P_rec1, training = train_data_P)
+Mg_rec_prepped1 <- prep(Mg_rec1, training = train_data_Mg)
 
 # 4. Process datasets ---------------------------------------------------------
-train_data_processed_P1 <- bake(P_rec_prepped1, new_data = train_data_P)
-test_data_processed_P1 <- bake(P_rec_prepped1, new_data = test_data_P)
+train_data_processed_Mg1 <- bake(Mg_rec_prepped1, new_data = train_data_Mg)
+test_data_processed_Mg1 <- bake(Mg_rec_prepped1, new_data = test_data_Mg)
 
 # 5. Verify processed data structure ------------------------------------------
-glimpse(train_data_processed_P1)
+glimpse(train_data_processed_Mg1)
 
 # 6. Lightweight Model Spec ---------------------------------------------------
-mlp_spec_tune_P1 <- mlp(
+mlp_spec_tune_Mg1 <- mlp(
   epochs = tune(),
   hidden_units = tune(),
   penalty = tune(),
@@ -92,9 +129,9 @@ mlp_spec_tune_P1 <- mlp(
   set_mode("regression")
 
 # 7. Minimal Workflow --------------------------------------------------------
-mlp_wflow_tune_P1 <- workflow() %>%
-  add_recipe(P_rec1) %>%
-  add_model(mlp_spec_tune_P1)
+mlp_wflow_tune_Mg1 <- workflow() %>%
+  add_recipe(Mg_rec1) %>%
+  add_model(mlp_spec_tune_Mg1)
 
 # 8. Efficient Parallel Setup -------------------------------------------------
 cl <- makePSOCKcluster(max(1, parallel::detectCores() - 2))  # Safer core allocation
@@ -102,10 +139,10 @@ registerDoParallel(cl)
 
 # 9. Randomized Grid Search ---------------------------------------------------
 set.seed(123)
-folds_P1 <- vfold_cv(train_data_P, v = 5)
+folds_Mg1 <- vfold_cv(train_data_Mg, v = 5)
 
 set.seed(123)
-param_grid_P1 <- grid_latin_hypercube(
+param_grid_Mg1 <- grid_latin_hypercube(
   epochs(range = c(500, 1500)),
   hidden_units(range = c(5, 500)),
   penalty(range = c(-7, -0.1)),
@@ -114,10 +151,10 @@ param_grid_P1 <- grid_latin_hypercube(
 )
 
 # 10. Memory-Optimized Tuning --------------------------------------------------
-grid_results_P1 <- tune_grid(
-  mlp_wflow_tune_P1,
-  resamples = folds_P1,
-  grid = param_grid_P1,
+grid_results_Mg1 <- tune_grid(
+  mlp_wflow_tune_Mg1,
+  resamples = folds_Mg1,
+  grid = param_grid_Mg1,
   metrics = metric_set(yardstick::rmse),
   control = control_grid(
     verbose = TRUE,
@@ -135,8 +172,9 @@ stopCluster(cl)
 registerDoSEQ()
 
 # Show best combinations
-show_best(grid_results_P1, n = 10, metric = "rmse")
+show_best(grid_results_Mg1, n = 10, metric = "rmse")
 
-save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_P1.RData')
 
-autoplot(grid_results_P1)
+save.image(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_Mg1.RData')
+
+autoplot(grid_results_Mg1)
