@@ -49,6 +49,27 @@ library(brulee )
 load(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_K2.RData')
 
 
+# EDA/exploratory Data Analysis
+
+# EDA/exploratory Data Analysis
+remove_outliers_iqr <- function(data, col_range) {
+  data %>%
+    mutate(across(all_of(names(data)[col_range]), ~ {
+      x <- .[. != 0]  # Exclude 0s before computing quantiles
+      q1 <- quantile(x, 0.25, na.rm = TRUE)
+      q3 <- quantile(x, 0.75, na.rm = TRUE)
+      iqr <- q3 - q1
+
+      ifelse(. == 0 | . > q3 + 1.5 * iqr | . < q1 - 1.5 * iqr, NA_real_, .)
+    }))
+}
+
+# Apply the function to columns 7 to 15
+R_macro_rev <- remove_outliers_iqr(R_macro, 7:15)
+
+str(R_macro_rev)
+
+
 str(R_macro_rev)
 
 Data_Ca <- R_macro_rev %>% 
