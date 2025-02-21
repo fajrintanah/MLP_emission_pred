@@ -53,6 +53,7 @@ library(brulee )
 library(dials)
 
 
+
 load(file='E://Fajrin/Publikasi/Pak Heru B Pulunggono/0 Road to Prof/18 Predicting Macronutrient in peat using ML/Data_Private/modelling_mlp2_19022025_P.RData')
 
 set.seed(123)
@@ -249,6 +250,3 @@ autoplot(grid_results_P2_2)
 #mean RMSE = 624 std 57.8
 
 # Closing this workflow
-#t
-
-
