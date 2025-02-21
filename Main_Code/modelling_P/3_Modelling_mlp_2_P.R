@@ -197,7 +197,7 @@ show_best(grid_results_P2_1, n = 10, metric = "rmse")
 # Define a new parameter grid based on the refined best ranges
 param_grid_P2_2 <- grid_latin_hypercube(
   epochs(range = c(1000, 1050)),
-  hidden_units(range = c(425, 430)),
+  hidden_units(range = c(420, 435)),
   penalty(range = c(-2, -1.75)),
   learn_rate(range = c(-0.5, -0.1)),
   size = 15  # 15 random combinations 
